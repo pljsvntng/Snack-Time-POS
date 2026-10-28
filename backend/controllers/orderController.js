@@ -1,0 +1,333 @@
+const pool = require('../config/db');
+const asyncHandler = require('../utils/asyncHandler');
+const ApiError = require('../utils/ApiError');
+const { generateOrderNumber } = require('../utils/orderNumber');
+
+// Loads a product plus its option groups/options, for validating an order line.
+async function loadProductForOrder(connection, productId) {
+  const [productRows] = await connection.query(
+    `SELECT * FROM products WHERE id = ? AND deleted_at IS NULL FOR UPDATE`,
+    [productId]
+  );
+  if (!productRows.length) throw new ApiError(400, 'One of the products in this order no longer exists.');
+  const product = productRows[0];
+  if (!product.available) throw new ApiError(400, `"${product.name}" is currently unavailable.`);
+
+  const [groups] = await connection.query(`SELECT * FROM option_groups WHERE product_id = ?`, [productId]);
+  const [options] = groups.length
+    ? await connection.query(
+        `SELECT * FROM options WHERE option_group_id IN (?)`,
+        [groups.map((g) => g.id)]
+      )
+    : [[]];
+
+  return { product, groups, options };
+}
+
+// Validates the customer's chosen option ids against a product's option groups,
+// enforcing required single/multi selection rules, and returns the resolved
+// option rows (with group name attached) plus the total price modifier.
+function resolveOptions(groups, options, selectedOptionIds) {
+  const selectedSet = new Set((selectedOptionIds || []).map(Number));
+  const resolved = [];
+
+  for (const group of groups) {
+    const groupOptionIds = options.filter((o) => o.option_group_id === group.id).map((o) => o.id);
+    const chosenInGroup = groupOptionIds.filter((id) => selectedSet.has(id));
+
+    if (group.is_required && chosenInGroup.length === 0) {
+      throw new ApiError(400, `Please select a ${group.name.toLowerCase()}.`);
+    }
+    if (group.selection_type === 'single' && chosenInGroup.length > 1) {
+      throw new ApiError(400, `Only one ${group.name.toLowerCase()} may be selected.`);
+    }
+
+    for (const optionId of chosenInGroup) {
+      const option = options.find((o) => o.id === optionId);
+      resolved.push({ ...option, group_name: group.name });
+    }
+  }
+
+  const modifierTotal = resolved.reduce((sum, o) => sum + Number(o.price_modifier), 0);
+  return { resolved, modifierTotal };
+}
+
+// POST /api/orders
+const createOrder = asyncHandler(async (req, res) => {
+  const { items, discount_id, payment_method, cash_received } = req.body;
+
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new ApiError(400, 'Cannot complete an order with no items.');
+  }
+  if (!['cash', 'gcash', 'other'].includes(payment_method)) {
+    throw new ApiError(400, 'Please select a valid payment method.');
+  }
+  for (const item of items) {
+    item.quantity = Number(item.quantity);
+    if (!item.product_id || !Number.isInteger(item.quantity) || item.quantity < 1) {
+      throw new ApiError(400, 'Each order item needs a product and a whole-number quantity of at least 1.');
+    }
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // ---- Resolve each line item: price, chosen options, snapshot data ----
+    const resolvedItems = [];
+    for (const item of items) {
+      const { product, groups, options } = await loadProductForOrder(connection, item.product_id);
+      const { resolved, modifierTotal } = resolveOptions(groups, options, item.selected_option_ids);
+      const unitPrice = Number(product.price) + modifierTotal;
+      const subtotal = unitPrice * item.quantity;
+
+      resolvedItems.push({ product, options: resolved, unitPrice, subtotal, quantity: item.quantity });
+    }
+
+    // ---- Check direct product stock (for products sold by piece, e.g. Siomai) ----
+    // Totalled per product, because the same product can appear on more than one line (different options).
+    const trackedQty = new Map(); // product_id -> total quantity across all lines
+    for (const line of resolvedItems) {
+      if (line.product.track_stock) {
+        trackedQty.set(line.product.id, (trackedQty.get(line.product.id) || 0) + line.quantity);
+      }
+    }
+    for (const line of resolvedItems) {
+      if (line.product.track_stock && Number(line.product.stock) < trackedQty.get(line.product.id)) {
+        throw new ApiError(400,
+          `Insufficient Stock: only ${Number(line.product.stock)} of "${line.product.name}" left. Please reduce the quantity.`);
+      }
+    }
+
+    // ---- Check ingredient stock (base recipe + chosen options), aggregated across the order ----
+    const requiredByIngredient = new Map(); // ingredient_id -> total quantity required
+
+    for (const line of resolvedItems) {
+      const [baseIngredients] = await connection.query(
+        `SELECT ingredient_id, quantity_required FROM product_ingredients WHERE product_id = ?`,
+        [line.product.id]
+      );
+      for (const bi of baseIngredients) {
+        const need = Number(bi.quantity_required) * line.quantity;
+        requiredByIngredient.set(bi.ingredient_id, (requiredByIngredient.get(bi.ingredient_id) || 0) + need);
+      }
+
+      for (const opt of line.options) {
+        const [optIngredients] = await connection.query(
+          `SELECT ingredient_id, quantity_required FROM option_ingredients WHERE option_id = ?`,
+          [opt.id]
+        );
+        for (const oi of optIngredients) {
+          const need = Number(oi.quantity_required) * line.quantity;
+          requiredByIngredient.set(oi.ingredient_id, (requiredByIngredient.get(oi.ingredient_id) || 0) + need);
+        }
+      }
+    }
+
+    // Round away floating-point noise (e.g. 0.1 x 3) so exact-stock orders are not rejected by accident.
+    for (const [ingredientId, needed] of requiredByIngredient.entries()) {
+      requiredByIngredient.set(ingredientId, Math.round(needed * 10000) / 10000);
+    }
+
+    if (requiredByIngredient.size > 0) {
+      const ingredientIds = [...requiredByIngredient.keys()];
+      // The rows are locked (FOR UPDATE) until commit, so two cashiers cannot both spend the same stock.
+      const [stockRows] = await connection.query(
+        `SELECT id, name, unit, current_stock FROM ingredients WHERE id IN (?) FOR UPDATE`,
+        [ingredientIds]
+      );
+      const stockById = new Map(stockRows.map((r) => [r.id, r]));
+      const fmt = (n) => String(Number(Number(n).toFixed(2)));
+
+      const shortages = [];
+      for (const [ingredientId, needed] of requiredByIngredient.entries()) {
+        const row = stockById.get(ingredientId);
+        const available = row ? Number(row.current_stock) : 0;
+        if (available < needed) {
+          shortages.push(`${row ? row.name : 'an ingredient'} (needs ${fmt(needed)} ${row ? row.unit : ''}, only ${fmt(available)} available)`);
+        }
+      }
+      if (shortages.length) {
+        throw new ApiError(400, `Insufficient Stock: ${shortages.join('; ')}. Please reduce the quantity or remove the item.`);
+      }
+    }
+
+    // ---- Compute totals ----
+    const subtotal = resolvedItems.reduce((sum, l) => sum + l.subtotal, 0);
+
+    let discountAmount = 0;
+    let discountRow = null;
+    if (discount_id) {
+      const [discountRows] = await connection.query(
+        `SELECT * FROM discounts WHERE id = ? AND active = 1`,
+        [discount_id]
+      );
+      if (discountRows.length) {
+        discountRow = discountRows[0];
+        discountAmount = discountRow.type === 'percent'
+          ? subtotal * (Number(discountRow.value) / 100)
+          : Number(discountRow.value);
+        discountAmount = Math.min(discountAmount, subtotal);
+      }
+    }
+
+    const total = Math.round((subtotal - discountAmount) * 100) / 100;
+
+    let cashReceivedValue = null;
+    let changeAmount = null;
+    if (payment_method === 'cash') {
+      if (cash_received === undefined || cash_received === null) {
+        throw new ApiError(400, 'Please enter the amount received.');
+      }
+      if (Number(cash_received) < total) {
+        throw new ApiError(400, 'Insufficient payment.');
+      }
+      cashReceivedValue = Number(cash_received);
+      changeAmount = Math.round((cashReceivedValue - total) * 100) / 100;
+    }
+
+    // ---- Persist the order ----
+    const orderNumber = await generateOrderNumber(connection);
+
+    const [orderResult] = await connection.query(
+      `INSERT INTO orders (order_number, user_id, subtotal, discount_id, discount_amount, total,
+         payment_method, cash_received, change_amount, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed')`,
+      [orderNumber, req.user.id, subtotal, discountRow?.id || null, discountAmount, total,
+        payment_method, cashReceivedValue, changeAmount]
+    );
+    const orderId = orderResult.insertId;
+
+    for (const line of resolvedItems) {
+      const [itemResult] = await connection.query(
+        `INSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity, subtotal)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [orderId, line.product.id, line.product.name, line.unitPrice, line.quantity, line.subtotal]
+      );
+      const orderItemId = itemResult.insertId;
+
+      for (const opt of line.options) {
+        await connection.query(
+          `INSERT INTO order_item_options (order_item_id, option_group_name, option_name, price_modifier)
+           VALUES (?, ?, ?, ?)`,
+          [orderItemId, opt.group_name, opt.name, opt.price_modifier]
+        );
+      }
+
+      if (line.product.track_stock) {
+        // Relative update, so several lines of the same product each take their share correctly.
+        await connection.query(`UPDATE products SET stock = stock - ? WHERE id = ?`, [line.quantity, line.product.id]);
+      }
+    }
+
+    // ---- Deduct ingredient stock & log inventory transactions ----
+    for (const [ingredientId, needed] of requiredByIngredient.entries()) {
+      // Guarded, atomic deduction: stock can never be taken below zero, whatever else happens.
+      const [upd] = await connection.query(
+        `UPDATE ingredients SET current_stock = current_stock - ? WHERE id = ? AND current_stock >= ?`,
+        [needed, ingredientId, needed]
+      );
+      if (upd.affectedRows !== 1) {
+        throw new ApiError(400, 'Insufficient Stock: ingredient stock changed while the order was being saved. Please try again.');
+      }
+      const [[current]] = await connection.query(
+        `SELECT current_stock FROM ingredients WHERE id = ?`, [ingredientId]
+      );
+      const newStock = Number(current.current_stock);
+      await connection.query(
+        `INSERT INTO inventory_transactions (ingredient_id, type, quantity, resulting_stock, reason, reference_order_id, user_id)
+         VALUES (?, 'deduct', ?, ?, ?, ?, ?)`,
+        [ingredientId, needed, newStock, `Sold on order ${orderNumber}`, orderId, req.user.id]
+      );
+    }
+
+    await connection.commit();
+
+    res.status(201).json({
+      id: orderId,
+      order_number: orderNumber,
+      subtotal, discount_amount: discountAmount, total,
+      payment_method, cash_received: cashReceivedValue, change_amount: changeAmount,
+      items: resolvedItems.map((l) => ({
+        product_id: l.product.id, name: l.product.name, unit_price: l.unitPrice,
+        quantity: l.quantity, subtotal: l.subtotal,
+        options: l.options.map((o) => ({ group: o.group_name, name: o.name, price_modifier: o.price_modifier })),
+      })),
+    });
+  } catch (err) {
+    await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
+  }
+});
+
+// GET /api/orders?from=&to=&search=&cashier_id=&status=&limit=
+const getOrders = asyncHandler(async (req, res) => {
+  const { from, to, search, cashier_id, status, limit } = req.query;
+  const conditions = [];
+  const params = [];
+
+  // Cashiers may only see their own transaction history
+  if (req.user.role === 'cashier') {
+    conditions.push('o.user_id = ?');
+    params.push(req.user.id);
+  } else if (cashier_id) {
+    conditions.push('o.user_id = ?');
+    params.push(cashier_id);
+  }
+
+  if (from) { conditions.push('o.created_at >= ?'); params.push(from); }
+  if (to) { conditions.push('o.created_at <= ?'); params.push(to); }
+  if (status) { conditions.push('o.status = ?'); params.push(status); }
+  if (search) {
+    conditions.push('(o.order_number LIKE ? OR EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id AND oi.product_name LIKE ?))');
+    params.push(`%${search}%`, `%${search}%`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const [rows] = await pool.query(
+    `SELECT o.*, u.full_name AS cashier_name
+     FROM orders o JOIN users u ON o.user_id = u.id
+     ${where}
+     ORDER BY o.created_at DESC
+     LIMIT ?`,
+    [...params, Math.min(Number(limit) || 100, 500)]
+  );
+  res.json(rows);
+});
+
+// GET /api/orders/:id -- full detail for viewing/reprinting a receipt
+const getOrder = asyncHandler(async (req, res) => {
+  const conditions = ['o.id = ?'];
+  const params = [req.params.id];
+  if (req.user.role === 'cashier') {
+    conditions.push('o.user_id = ?');
+    params.push(req.user.id);
+  }
+
+  const [orderRows] = await pool.query(
+    `SELECT o.*, u.full_name AS cashier_name, d.name AS discount_name
+     FROM orders o JOIN users u ON o.user_id = u.id LEFT JOIN discounts d ON o.discount_id = d.id
+     WHERE ${conditions.join(' AND ')}`,
+    params
+  );
+  if (!orderRows.length) throw new ApiError(404, 'Order not found.');
+  const order = orderRows[0];
+
+  const [items] = await pool.query(`SELECT * FROM order_items WHERE order_id = ?`, [order.id]);
+  const itemIds = items.map((i) => i.id);
+  const [options] = itemIds.length
+    ? await pool.query(`SELECT * FROM order_item_options WHERE order_item_id IN (?)`, [itemIds])
+    : [[]];
+
+  order.items = items.map((item) => ({
+    ...item,
+    options: options.filter((o) => o.order_item_id === item.id),
+  }));
+
+  res.json(order);
+});
+
+module.exports = { createOrder, getOrders, getOrder };
