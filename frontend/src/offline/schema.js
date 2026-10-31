@@ -1,3 +1,4 @@
+import {syncSchema} from './sync-schema.js';
 export const schema = `
 CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS authorized_users (
@@ -32,5 +33,6 @@ CREATE TRIGGER IF NOT EXISTS immutable_local_items_update BEFORE UPDATE ON local
 CREATE TRIGGER IF NOT EXISTS immutable_local_items_delete BEFORE DELETE ON local_order_items BEGIN SELECT RAISE(ABORT,'Local sale items cannot be deleted'); END;
 CREATE TRIGGER IF NOT EXISTS immutable_movements_update BEFORE UPDATE ON inventory_movements BEGIN SELECT RAISE(ABORT,'Stock movements are immutable'); END;
 CREATE TRIGGER IF NOT EXISTS immutable_movements_delete BEFORE DELETE ON inventory_movements BEGIN SELECT RAISE(ABORT,'Stock movements cannot be deleted'); END;
-PRAGMA user_version=1;
+${syncSchema}
+PRAGMA user_version=2;
 `;

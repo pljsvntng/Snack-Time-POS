@@ -118,6 +118,7 @@ export function CartProvider({ children }) {
     if (hydratedUser !== user?.id) throw new Error('The saved cart is still opening.');
     const store = await getOfflineStore();
     await store.draft({ items: itemsRef.current, discount: discountRef.current, request_id: checkoutIdRef.current }, user.id);
+    window.dispatchEvent(new Event('pos:cartpersisted'));
     setPersistenceError(null);
   }, [offline, hydratedUser, user?.id]);
   useEffect(() => {

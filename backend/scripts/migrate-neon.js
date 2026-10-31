@@ -142,5 +142,5 @@ async function migrate(){
     console.log('Keep local sales paused until the verified cloud endpoint is used, or repeat migration into another empty Neon database.');
   }finally{await target.end();}
 }
-module.exports={fingerprint,compare,localOptions,backup,canonicalConstraint};
+module.exports={fingerprint,compare,localOptions,backup,canonicalConstraint,command};
 if(require.main===module){const action=process.argv[2];(action==='backup'?backup:action==='migrate'?migrate:async()=>{throw Error('Usage: node scripts/migrate-neon.js backup|migrate');})().catch(e=>{console.error(e.message);process.exitCode=1;});}

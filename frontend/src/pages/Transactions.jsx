@@ -1,4 +1,5 @@
 import TableScroll from '../components/TableScroll';
+import {syncLabel} from '../utils/syncLabel';
 import { useEffect, useState } from 'react';
 import { Search, Eye, Printer, X } from 'lucide-react';
 import { api } from '../services/api';
@@ -96,7 +97,7 @@ export default function Transactions() {
                 <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No transactions found.</td></tr>
               ) : orders.map((o) => (
                 <tr key={o.id}>
-                  <td>{o.order_number}{o.offline && <span className="cell-sub" style={{ display: 'block' }}>Local • Not uploaded</span>}</td>
+                  <td>{o.order_number}{syncLabel(o) && <span className="cell-sub" style={{ display: 'block' }}>{syncLabel(o)}</span>}</td>
                   <td>{formatDateTime(o.created_at)}</td>
                   {user.role === 'admin' && <td>{o.cashier_name}</td>}
                   <td className="num">{peso(o.total)}</td>

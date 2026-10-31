@@ -817,3 +817,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--primary); outli
 .receipt { overflow-wrap: anywhere; }
 @media (max-height: 559px) { .offline-status { padding: 4px 12px; } .offline-status small { display: none; } }
 @media print { .offline-status { display: none; } }
+/* Touch targets and wrapping for synchronization controls. */
+.sync-indicator { flex-wrap:wrap; }
+.sync-indicator small { flex-basis:100%; overflow-wrap:anywhere; }
+.sync-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.sync-actions button { min-height:44px; }
+.sync-review-row { border-top:1px solid var(--border); padding:16px 0; overflow-wrap:anywhere; }
+.sync-review-row label { display:block; margin:12px 0; }
+.sync-review-row input,.sync-review-row textarea { width:100%; max-width:480px; display:block; min-height:44px; }

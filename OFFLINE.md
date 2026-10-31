@@ -1,6 +1,6 @@
 # Android SQLite offline POS
 
-PostgreSQL on Neon remains the online system of record. The online POS is deployed at https://snack-time-pos.onrender.com on Render Free. Android has a separate encrypted SQLite database for offline cash sales and is configured with the actual HTTPS API. The existing browser POS remains online. No synchronization or local-sale upload is enabled in this phase; automatic synchronization is still the next phase.
+PostgreSQL on Neon remains the online system of record. The online POS is deployed at https://snack-time-pos.onrender.com on Render Free. Android has a separate encrypted SQLite database for offline cash sales and is configured with the actual HTTPS API. The existing browser POS remains online. Phase 6 now adds automatic delivery of durable local sales. See [SYNCHRONIZATION.md](SYNCHRONIZATION.md) for delivery, historical prices, administrator conflict review and test results.
 
 ## Implemented operations
 
@@ -32,7 +32,7 @@ No plaintext passwords or server bcrypt hashes are exported into SQLite. A local
 
 The app rejects clock rollback and expired/forged/other-device grants. An online rejection revokes the cached local authority while retaining financial records. A successful online authorization can renew the verifier without resetting the catalog, local stock or sales. If full catalog preparation fails, a previously prepared device can renew authorization against its existing data. The app cannot learn remote user revocations while disconnected; the seven-day grant bounds that exposure. Rooted devices, maliciously modified app binaries, deliberate clock tampering, and physical hardware compromise are outside these software-only guarantees.
 
-The server performs a repeatable-read, read-only bootstrap. It exports no password hashes and caches only the user's own server history. Once any local sale exists, reauthorization does not overwrite the catalog/stock snapshot or erase deductions. Local stock is a snapshot, not a reservation on central inventory; other devices can sell the same central stock. Global stock reconciliation is intentionally deferred to the synchronization phase.
+The server performs a repeatable-read, read-only bootstrap. It exports no password hashes and caches only the user's own server history. Phase 6 refreshes the catalog while preserving pending deductions and deferring replacement during saved carts. Local stock is a snapshot, not a reservation on central inventory; other devices can sell the same central stock. Phase 6 preserves all sales and records explicit stock conflicts for administrator reconciliation.
 
 ## Server signing key
 
@@ -68,7 +68,7 @@ cd frontend/android
 ./gradlew.bat :app:assembleDebug --no-daemon
 ```
 
-On this Windows workspace inside OneDrive, use `npm --prefix frontend run android:debug` after `android:prepare`. It materializes the native project, assets and native plugin sources under `%LOCALAPPDATA%/SnackTimePOS/builds` before invoking Gradle, avoiding OneDrive reparse-point/file-lock failures. It does not delete or rewrite the source images. The tested debug APK is copied to ignored `database/backups/android-build-artifacts/snack-time-pos-cloud-debug.apk`, with its checksum in `build.json`. It uses the actual Render API and is for physical-device acceptance testing; synchronization and release signing are still pending.
+On this Windows workspace inside OneDrive, use `npm --prefix frontend run android:debug` after `android:prepare`. It materializes the native project, assets and native plugin sources under `%LOCALAPPDATA%/SnackTimePOS/builds` before invoking Gradle, avoiding OneDrive reparse-point/file-lock failures. It does not delete or rewrite the source images. The tested debug APK is copied to ignored `database/backups/android-build-artifacts/snack-time-pos-cloud-debug.apk`, with its checksum in `build.json`. It uses the actual Render API and is for physical-device acceptance testing; physical-device acceptance and release signing remain pending.
 
 A local Android SDK was installed under the ignored `database/backups/android-sdk` build-tools folder, with its path in ignored `frontend/android/local.properties`. The native Android project and SQLCipher plugin compiled successfully into a debug APK. Android assets now use the verified actual Render API. A release signing workflow and physical Android acceptance tests remain required before production distribution. No physical Android device was used to test SQLCipher/Keystore or power cycling.
 

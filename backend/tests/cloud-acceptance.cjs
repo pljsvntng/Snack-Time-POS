@@ -3,7 +3,9 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
 const {spawn}=require('node:child_process'),dotenv=require('dotenv');
 const root=path.resolve(__dirname,'../..');
 const privateEnv=dotenv.parse(fs.readFileSync(path.join(root,'backend/.env.render')));
-const accounts=require('../utils/ownerCredentialVault').ownerAccounts();
+// Branches can retain older owner password hashes. Use isolated QA identities;
+// verify actual production identities separately with read-only live tests.
+const accounts=[];
 const qaHost=process.env.POS_QA_HOST,productionUrl=new URL(privateEnv.DATABASE_URL);
 if(!qaHost||!qaHost.endsWith('.neon.tech')||qaHost===productionUrl.hostname||qaHost.replace('-pooler','')===productionUrl.hostname.replace('-pooler',''))throw Error('A separate POS_QA_HOST Neon test branch is required.');
 const qaUrl=new URL(productionUrl);qaUrl.hostname=qaHost;
@@ -27,8 +29,9 @@ async function snapshot(pool){const client=await pool.connect();try{await client
 (async()=>{
  const before=await snapshot(production),checks=[];
  try{
+  for(const role of ['admin','cashier']){const username='qa_'+role+'_'+suffix,password=crypto.randomBytes(24).toString('base64url'),hash=await require('bcrypt').hash(password,12);await qa.query('INSERT INTO users(role_id,full_name,username,password_hash) VALUES((SELECT id FROM roles WHERE name=$1),$2,$3,$4)',[role,'Cloud QA '+role,username,hash]);accounts.push({label:role==='admin'?'admin':'juan',username,password});}
   await start();
-  const login=async username=>{const account=accounts.find(a=>a.username===username);assert.ok(account);return request('/auth/login','POST',account);};
+  const login=async username=>{const account=accounts.find(a=>a.label===username);assert.ok(account);return request('/auth/login','POST',{username:account.username,password:account.password});};
   const admin=(await login('admin')).token,cashier=(await login('juan')).token;
   await request('/auth/login','POST',{username:'admin',password:'wrong'},null,401);await request('/users','GET',undefined,cashier,403);
   for(const route of ['/auth/me','/categories','/products','/inventory','/inventory/transactions','/orders','/users','/discounts','/settings','/reports/dashboard','/reports/daily','/reports/weekly','/reports/monthly'])await request(route,'GET',undefined,admin);
@@ -66,7 +69,7 @@ async function snapshot(pool){const client=await pool.connect();try{await client
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=','base64');const form=new FormData();form.append('image',new Blob([png],{type:'image/png'}),'cloud-qa.png');
   const uploaded=await fetch(base+'/api/products/'+product.id+'/image',{method:'POST',headers:{Authorization:'Bearer '+admin},body:form});assert.equal(uploaded.status,200);const {image}=await uploaded.json();await stop();await start();assert.deepEqual(Buffer.from(await (await fetch(base+image)).arrayBuffer()),png);
   await request('/products/'+product.id+'/image','DELETE',undefined,admin);assert.equal((await request('/products/'+product.id,'GET',undefined,admin)).image,null);
-  const device=crypto.randomUUID(),account=accounts.find(a=>a.username==='juan');const auth=await request('/auth/login','POST',{...account,offline_device_id:device});
+  const device=crypto.randomUUID(),account=accounts.find(a=>a.label==='juan');const auth=await request('/auth/login','POST',{username:account.username,password:account.password,offline_device_id:device});
   const jwk=JSON.parse(fs.readFileSync(path.join(root,'frontend/src/offline/server-public-key.json')));const grant=require('jsonwebtoken').verify(auth.offline_authorization,crypto.createPublicKey({key:jwk,format:'jwk'}),{algorithms:['RS256'],issuer:'snacktime-pos',audience:'snacktime-offline'});assert.equal(grant.device_id,device);
   const bootstrap=await request('/offline/bootstrap','GET',undefined,auth.token);assert.ok(bootstrap.orders.every(o=>o.user_id===grant.user.id));assert.equal(JSON.stringify(bootstrap).includes('password_hash'),false);
   checks.push('PostgreSQL photos survive server restart; signed device authorization and private offline catalog bootstrap');

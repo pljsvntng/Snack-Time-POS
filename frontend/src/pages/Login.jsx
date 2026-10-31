@@ -96,7 +96,7 @@ export default function Login() {
               <button type="button" className={`btn ${!offline ? 'btn-primary' : 'btn-outline'}`} disabled={loading} onClick={() => switchMode(false)}>Online POS</button>
               <button type="button" className={`btn ${offline ? 'btn-primary' : 'btn-outline'}`} disabled={loading || !offlineStatus?.preparedAt} onClick={() => switchMode(true)}>Offline cash POS</button>
             </div>
-            <p>{offline ? 'Use your previously authorized account. Sales stay on this device and are not uploaded.' : 'A successful online sign-in prepares encrypted offline access on this Android device for seven days.'}</p>
+            <p>{offline ? 'Use your previously authorized account. Sales stay on this device and synchronize automatically when the API is reachable.' : 'A successful online sign-in prepares encrypted offline access on this Android device for seven days.'}</p>
             {sessionError && <div role="alert">{sessionError}</div>}
           </div>}
           {error && (

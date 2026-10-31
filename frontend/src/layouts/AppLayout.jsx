@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { BrandLockup } from '../components/Brand';
+import SyncIndicator from '../components/SyncIndicator';
 
 const ADMIN_LINKS = [
   { to: '/pos', icon: ShoppingCart, label: 'POS' },
@@ -98,12 +99,7 @@ export default function AppLayout() {
           </div>
         </header>
         <div className={`page-body ${isPos ? 'page-body-pos' : ''}`}>
-          {android && <div className="offline-status" role="status">
-            <span>{offline ? 'Offline cash POS • Sales saved on this device • Not uploaded' : 'Online POS'}{offlineStatus?.localSales ? ` • ${offlineStatus.localSales} local sale(s) retained` : ''}</span>
-            <button type="button" className="btn btn-outline btn-sm" onClick={async()=>{await switchMode(!offline);navigate('/login');}} disabled={!offline && !offlineStatus?.preparedAt}>{offline ? 'Sign in online' : 'Use offline POS'}</button>
-            {offline && <small>Local stock snapshot: {offlineStatus?.preparedAt ? new Date(offlineStatus.preparedAt).toLocaleString('en-PH') : 'unavailable'}. Other devices may have different stock.</small>}
-            {offlineStatus?.warning && <small>{offlineStatus.warning}</small>}
-          </div>}
+          <SyncIndicator />
           <Outlet />
         </div>
       </div>

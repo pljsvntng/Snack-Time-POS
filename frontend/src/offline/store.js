@@ -1,14 +1,15 @@
 import { schema } from './schema.js';
+import {SyncStore} from './sync-store.js';
 import { bytes64, verifier, equal, hash, verifyGrant, scaled, integer, safe, offlineError } from './security.js';
 
-export class OfflineStore {
- constructor(driver,publicKey,{now=()=>Date.now()}={}) { this.db=driver;this.publicKey=publicKey;this.now=now;this.session=null;this.tail=Promise.resolve(); }
+export class OfflineStore extends SyncStore {
+ constructor(driver,publicKey,{now=()=>Date.now()}={}) { super();this.db=driver;this.publicKey=publicKey;this.now=now;this.session=null;this.tail=Promise.resolve(); }
  async initialize() {
   if(!this.initialized)this.initialized=(async()=>{
    await this.db.execute('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;');
    const version=(await this.db.query('PRAGMA user_version'))[0].user_version;
-   if(version>1)throw offlineError('This local database needs a newer application.');
-   await this.db.transaction(async()=>{await this.db.execute(schema);if(!await this.getMeta('device_id'))await this.setMeta('device_id',crypto.randomUUID());});
+   if(version>2)throw offlineError('This local database needs a newer application.');
+   await this.db.transaction(async()=>{await this.db.execute(schema);if(!await this.getMeta('device_id'))await this.setMeta('device_id',crypto.randomUUID());await this.backfillOutbox();});
   })();
   return this.initialized;
  }
@@ -39,17 +40,7 @@ export class OfflineStore {
     const old=(await this.db.query('SELECT aliases_json FROM authorized_users WHERE user_id=?',[claims.user.id]))[0];
     const aliases=[...new Set([claims.user.username,alias,...(old?JSON.parse(old.aliases_json):[])].filter(Boolean).map(s=>s.trim().toLowerCase()))];
     await this.db.run('INSERT INTO authorized_users(user_id,username,aliases_json,grant_jwt,salt,verifier) VALUES (?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET username=excluded.username,aliases_json=excluded.aliases_json,grant_jwt=excluded.grant_jwt,salt=excluded.salt,verifier=excluded.verifier,failures=0,locked_until=0,revoked=0',[claims.user.id,claims.user.username,JSON.stringify(aliases),grant,salt,derived]);
-    retainedStock=Boolean(snapshot.authorization_only)||(await this.db.query('SELECT COUNT(*) AS count FROM local_orders'))[0].count>0;
-    // Never overwrite deductions or erase local sales during another online authorization.
-    if(!retainedStock){
-     for(const table of ['products','ingredients','categories','discounts','settings'])await this.db.run('DELETE FROM '+table);
-     for(const p of snapshot.products)await this.db.run('INSERT INTO products(id,data_json,stock_quantity) VALUES (?,?,?)',[p.id,JSON.stringify(p),p.track_stock?integer(p.stock??0,'stock',0):null]);
-     for(const i of snapshot.ingredients)await this.db.run('INSERT INTO ingredients(id,name,unit,current_units) VALUES (?,?,?,?)',[i.id,i.name,i.unit,scaled(i.current_stock,'Stock')]);
-     for(const c of snapshot.categories)await this.db.run('INSERT INTO categories(id,data_json) VALUES (?,?)',[c.id,JSON.stringify(c)]);
-     for(const d of snapshot.discounts)await this.db.run('INSERT INTO discounts(id,data_json) VALUES (?,?)',[d.id,JSON.stringify(d)]);
-     for(const [k,v] of Object.entries(snapshot.settings))await this.db.run('INSERT INTO settings(key,value) VALUES (?,?)',[k,String(v)]);
-     await this.setMeta('prepared_at',snapshot.prepared_at);
-    }
+    retainedStock=snapshot.authorization_only?true:(await this.cacheSnapshot(snapshot)).retainedStock;
     for(const o of snapshot.orders||[])if(o.user_id===claims.user.id)await this.db.run('INSERT INTO cached_orders(id,user_id,data_json) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json',[`server:${o.id}`,o.user_id,JSON.stringify({...o,id:`server:${o.id}`,source:'server-cache'})]);
    });
    this.session={user:claims.user,expires:Math.min(claims.exp*1000,now+8*3600000)};
@@ -100,8 +91,8 @@ export class OfflineStore {
   });
   return saved;
  }); }
- async listOrders({from,to,search='',localOnly=false}={}) { return this.exclusive(async()=>{const user=await this.actor();const local=(await this.db.query('SELECT receipt_json FROM local_orders WHERE user_id=? ORDER BY created_at DESC',[user.id])).map(r=>JSON.parse(r.receipt_json));const cached=localOnly?[]:(await this.db.query('SELECT data_json FROM cached_orders WHERE user_id=?',[user.id])).map(r=>JSON.parse(r.data_json));const date=v=>new Date(v?.includes(' ')?v.replace(' ','T')+'+08:00':v).getTime();return [...local,...cached].filter(o=>(!from||date(o.created_at)>=date(from))&&(!to||date(o.created_at)<=date(to))&&JSON.stringify([o.order_number,...o.items.map(i=>i.product_name||i.name)]).toLowerCase().includes(search.toLowerCase())).sort((a,b)=>date(b.created_at)-date(a.created_at));}); }
- async order(id) { return this.exclusive(async()=>{const user=await this.actor();const row=id.startsWith('server:')?(await this.db.query('SELECT data_json AS receipt_json FROM cached_orders WHERE id=? AND user_id=?',[id,user.id]))[0]:(await this.db.query('SELECT receipt_json FROM local_orders WHERE id=? AND user_id=?',[id,user.id]))[0];if(!row)throw offlineError('Local transaction not found.',404);return JSON.parse(row.receipt_json);}); }
+ async listOrders({from,to,search='',localOnly=false}={}) { return this.exclusive(async()=>{const user=await this.actor();const local=(await this.db.query('SELECT receipt_json FROM local_orders WHERE user_id=? ORDER BY created_at DESC',[user.id])).map(r=>JSON.parse(r.receipt_json));const cached=localOnly?[]:(await this.db.query('SELECT data_json FROM cached_orders WHERE user_id=?',[user.id])).map(r=>JSON.parse(r.data_json));const date=v=>new Date(v?.includes(' ')?v.replace(' ','T')+'+08:00':v).getTime();return (await this.decorateOrders([...local,...cached.filter(o=>!local.some(l=>l.id==='local:'+o.offline_client_id))])).filter(o=>(!from||date(o.created_at)>=date(from))&&(!to||date(o.created_at)<=date(to))&&JSON.stringify([o.order_number,...o.items.map(i=>i.product_name||i.name)]).toLowerCase().includes(search.toLowerCase())).sort((a,b)=>date(b.created_at)-date(a.created_at));}); }
+ async order(id) { return this.exclusive(async()=>{const user=await this.actor();const row=id.startsWith('server:')?(await this.db.query('SELECT data_json AS receipt_json FROM cached_orders WHERE id=? AND user_id=?',[id,user.id]))[0]:(await this.db.query('SELECT receipt_json FROM local_orders WHERE id=? AND user_id=?',[id,user.id]))[0];if(!row)throw offlineError('Local transaction not found.',404);return (await this.decorateOrders([JSON.parse(row.receipt_json)]))[0];}); }
  async checkout(request) {
   return this.exclusive(async()=>{
    const user=await this.actor();
@@ -114,6 +105,7 @@ export class OfflineStore {
    return this.db.transaction(async()=>{
     const existing=(await this.db.query('SELECT * FROM local_orders WHERE request_id=?',[request.request_id]))[0];
     if(existing){if(existing.user_id!==user.id||existing.request_hash!==fingerprint)throw offlineError('Checkout identifier already belongs to a different sale.',409);return JSON.parse(existing.receipt_json);}
+    const expires=await this.getMeta('sync_catalog_expires_at');if(expires&&Date.parse(expires)<=await this.clock())throw offlineError('Offline catalog expired. Connect and refresh the catalog before another sale.',409);
     const draft=(await this.db.query('SELECT request_id FROM drafts WHERE user_id=?',[user.id]))[0];
     if(!draft||draft.request_id!==request.request_id)throw offlineError('The saved cart changed. Review the current order.',409);
     const products=new Map((await this.productRows()).map(p=>[p.id,p])),required=new Map(),tracked=new Map(),lines=[];
@@ -133,11 +125,12 @@ export class OfflineStore {
     const total=subtotal-discount;if(request.expected_total!==undefined&&scaled(request.expected_total,'Expected total')!==total)throw offlineError('Prices changed. Review your order.',409);if(cash<total)throw offlineError('Insufficient payment.');
     const id='local:'+request.request_id,device=await this.getMeta('device_id'),created=new Date(await this.clock()).toISOString();
     const settings=Object.fromEntries((await this.db.query('SELECT * FROM settings')).map(s=>[s.key,s.value]));
-    const receipt={id,order_number:'OFF-'+device.slice(0,8)+'-'+request.request_id,user_id:user.id,cashier_name:user.fullName,created_at:created,subtotal:subtotal/100,discount_id:discountId,discount_name:discountName,discount_amount:discount/100,total:total/100,payment_method:'cash',cash_received:cash/100,change_amount:(cash-total)/100,status:'completed',source:'local',offline:true,receipt_settings:settings,items:lines};
+    const receipt={id,order_number:'OFF-'+device.slice(0,8)+'-'+request.request_id,user_id:user.id,cashier_name:user.fullName,created_at:created,subtotal:subtotal/100,discount_id:discountId,discount_name:discountName,discount_amount:discount/100,total:total/100,payment_method:'cash',cash_received:cash/100,change_amount:(cash-total)/100,status:'completed',source:'local',offline:true,sync_status:'pending',receipt_settings:settings,items:lines};
     await this.db.run('INSERT INTO local_orders(id,request_id,request_hash,user_id,device_id,receipt_number,created_at,subtotal_cents,discount_cents,total_cents,cash_cents,change_cents,receipt_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',[id,request.request_id,fingerprint,user.id,device,receipt.order_number,created,subtotal,discount,total,cash,cash-total,JSON.stringify(receipt)]);
     for(const line of lines)await this.db.run('INSERT INTO local_order_items(id,order_id,snapshot_json) VALUES (?,?,?)',[crypto.randomUUID(),id,JSON.stringify(line)]);
     for(const [pid,qty] of tracked){const result=await this.db.run('UPDATE products SET stock_quantity=stock_quantity-? WHERE id=? AND stock_quantity>=?',[qty,pid,qty]);if(result.changes!==1)throw offlineError('Insufficient Stock: '+products.get(pid).name);const stock=(await this.db.query('SELECT stock_quantity FROM products WHERE id=?',[pid]))[0].stock_quantity;await this.db.run('INSERT INTO inventory_movements(id,order_id,kind,entity_id,quantity_units,resulting_units) VALUES (?,?,?,?,?,?)',[crypto.randomUUID(),id,'product',pid,qty,stock]);}
     for(const [ingredient,qty] of required){const result=await this.db.run('UPDATE ingredients SET current_units=current_units-? WHERE id=? AND current_units>=?',[qty,ingredient,qty]);if(result.changes!==1)throw offlineError('Insufficient Stock: a recipe ingredient is unavailable.');const stock=(await this.db.query('SELECT current_units FROM ingredients WHERE id=?',[ingredient]))[0].current_units;await this.db.run('INSERT INTO inventory_movements(id,order_id,kind,entity_id,quantity_units,resulting_units) VALUES (?,?,?,?,?,?)',[crypto.randomUUID(),id,'ingredient',ingredient,qty,stock]);}
+    await this.enqueue(receipt,{request_id:request.request_id,items,discount_id:discountId,payment_method:'cash',cash_received:(cash/100).toFixed(2),expected_total:(total/100).toFixed(2)});
     await this.db.run('DELETE FROM drafts WHERE user_id=?',[user.id]);
     return receipt;
    });

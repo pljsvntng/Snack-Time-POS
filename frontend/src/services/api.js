@@ -40,7 +40,7 @@ async function request(path, { method = 'GET', body, isFormData = false } = {}) 
     const error = new Error(message); error.status = res.status; throw error;
   }
   if(native && method==='GET' && path.startsWith('/orders') && !/^\/orders\//.test(path)) {
-    try { const local=await (await getOfflineStore()).listOrders({...Object.fromEntries(new URL(path,'https://pos.invalid').searchParams),localOnly:true});return [...local,...data].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)); }catch{}
+    try { const local=await (await getOfflineStore()).listOrders({...Object.fromEntries(new URL(path,'https://pos.invalid').searchParams),localOnly:true});const serverIds=new Set(data.map(o=>o.id));return [...local.filter(o=>!serverIds.has(o.server_order_id)),...data].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)); }catch{}
   }
   return data;
 }

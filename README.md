@@ -188,3 +188,5 @@ already there and working.
   dialog with print-specific CSS sized for narrow thermal rolls — most POS thermal printers accept
   this via a standard printer driver.
 - Product images are illustrated placeholders (see note at the top).
+
+Android offline-to-online delivery, database migrations and device acceptance: [SYNCHRONIZATION.md](SYNCHRONIZATION.md).

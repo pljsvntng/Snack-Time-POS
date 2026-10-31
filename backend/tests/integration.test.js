@@ -18,6 +18,7 @@ test('PostgreSQL POS API regression suite', async (t) => {
     await maintenance.query('CREATE DATABASE "' + database + '"'); created = true;
     admin = new Pool({...options(database), max:1});
     await admin.query(fs.readFileSync(path.join(__dirname, '../../database/schema.postgresql.sql'), 'utf8'));
+    await require('../utils/syncSchema').ensureSyncSchema(admin);
     const seed = fs.readFileSync(path.join(__dirname, '../../database/seed.sql'), 'utf8').replace(/USE foodtrip_house_pos;/, '');
     await admin.query(seed);
     const hash = await require('bcrypt').hash('test-password', 4);

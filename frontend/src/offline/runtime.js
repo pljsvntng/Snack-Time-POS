@@ -11,6 +11,12 @@ export function getOfflineStore() {
 }
 export async function offlineMode() { return isAndroid() ? (await (await getOfflineStore()).status()).offline : false; }
 export async function setOfflineMode(value) { const store=await getOfflineStore();store.lock();await store.mode(value);window.dispatchEvent(new Event('pos:modechange')); }
+export async function activateSynchronization(store){
+ if(!isAndroid())return;
+ const baseUrl=import.meta.env.VITE_API_URL;if(!baseUrl||!baseUrl.startsWith('https://'))return;
+ const {startSynchronization}=await import('./sync-manager.js');
+ return startSynchronization(store,{baseUrl,cacheSnapshot:snapshot=>cacheImages(snapshot,p=>new URL(p,baseUrl.replace(/\/api\/?$/,'')+'/').href)});
+}
 export async function offlineRequest(path,{method='GET',body}={}) {
  const store=await getOfflineStore();const url=new URL(path,'https://pos.invalid');
  if(method==='GET'&&['/products','/categories','/discounts','/settings'].includes(url.pathname))return store.catalog(url.pathname.slice(1));

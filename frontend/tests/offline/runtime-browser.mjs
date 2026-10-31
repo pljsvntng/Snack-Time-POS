@@ -1,9 +1,10 @@
 // Test-only SQLite transport. Never imported by production builds.
 const address='http://127.0.0.1:14804';let queue=Promise.resolve();
 function call(method,args=[]){const task=queue.then(async()=>{const res=await fetch(address+'/sqlite',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method,args})});const result=await res.json();if(!res.ok){const error=new Error(result.error);error.status=result.status;throw error;}return result.value;});queue=task.catch(()=>{});return task;}
-const methods=['status','mode','enroll','renew','login','revoke','token','catalog','draft','listOrders','order','checkout'];
+const methods=['status','syncStatus','wakeDeliveries','mode','enroll','renew','login','revoke','token','catalog','draft','listOrders','order','checkout'];
 const store=Object.fromEntries(methods.map(method=>[method,(...args)=>call(method,args)]));store.lock=()=>call('lock');store.session=null;
 export const isAndroid=()=>true;
+export const activateSynchronization=async()=>{}; // existing offline-only UI scenarios never upload real sales
 export const getOfflineStore=async()=>store;
 export const offlineMode=async()=>(await store.status()).offline;
 export const setOfflineMode=async value=>{await store.lock();await store.mode(value);};

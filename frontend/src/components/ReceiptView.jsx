@@ -1,4 +1,5 @@
 import { peso, formatDateTime } from '../utils/currency';
+import {syncLabel} from '../utils/syncLabel';
 
 export default function ReceiptView({ order, settings, cashierName }) {
   if (!order) return null;
@@ -13,7 +14,7 @@ export default function ReceiptView({ order, settings, cashierName }) {
         {order.offline ? 'LOCAL CASH RECEIPT' : 'SALES RECEIPT'}
       </div>
       <hr />
-      {order.offline && <div className="receipt-center">Saved on this device • Not uploaded</div>}
+      {syncLabel(order) && <div className="receipt-center">{syncLabel(order)}</div>}
       <div>Order #: {order.order_number}</div>
       <div>Date: {formatDateTime(order.created_at || new Date())}</div>
       <div>Cashier: {cashierName || order.cashier_name || '-'}</div>

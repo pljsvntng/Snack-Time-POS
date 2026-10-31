@@ -17,6 +17,7 @@ async function prepare() {
     if (await require('bcrypt').compare(password,user.password_hash)) throw Error('Cloud deployment blocked: change the default password for '+user.username+' in the cloud database. Local accounts are unchanged.');
   }
   await pool.query(await fs.readFile(path.join(__dirname,'../../database/cloud-storage.postgresql.sql'),'utf8'));
+  await require('../utils/syncSchema').ensureSyncSchema();
   const publicRoot = path.resolve(__dirname,'../../frontend/public');
   const {rows:products} = await pool.query("SELECT DISTINCT image FROM products WHERE image LIKE '/images/%'");
   for (const {image} of products) {

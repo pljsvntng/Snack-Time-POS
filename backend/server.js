@@ -22,7 +22,7 @@ const app = express();
 app.use(helmet({ crossOriginResourcePolicy: false })); // allow serving product images cross-origin to the frontend dev server
 const allowedOrigins = new Set([...(process.env.CLIENT_ORIGIN || 'http://localhost:5173').split(',').map(v=>v.trim()), 'https://localhost']);
 app.use(cors({ origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)) }));
-app.use(express.json());
+app.use(express.json({limit:'1mb'}));
 // Log path/status only. Query strings may contain a mistakenly supplied secret.
 app.use(morgan((tokens,req,res)=>[tokens.method(req,res),req.path,tokens.status(req,res),tokens['response-time'](req,res)+' ms'].join(' ')));
 

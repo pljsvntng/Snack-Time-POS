@@ -88,15 +88,7 @@ Check the actual HTTPS `/api/health`, initial login, roles, catalog/search/optio
 
 Only after the cloud checks pass, put the actual deployed Render URL plus `/api` into `frontend/.env.android.local` as `VITE_API_URL`. Run `npm --prefix frontend run android:prepare`. This command refuses missing, HTTP, loopback, reserved example/test URLs and non-`/api` paths; it also requires a successful PostgreSQL health response. Bundled app assets remain local. Complete a signed release build and physical Android tests before distributing an APK.
 
-Automatic synchronization remains a required next phase, not a claimed capability of this build. Implement and test:
-
-1. A separate durable delivery ledger for immutable SQLite sales; pending receipts remain visible until the server acknowledges a permanent UUID.
-2. An authenticated device-bound server endpoint with a unique device/sale UUID, request-content fingerprint, and one PostgreSQL transaction for central sale/items/inventory/audit/idempotency records.
-3. Historical catalog/price/discount provenance so completed cash receipts retain original amounts rather than being repriced. Treat shared-inventory conflicts as visible reconciliation cases; never silently discard a completed cash sale.
-4. Resume on connectivity/app foreground with bounded retry/backoff, safe handling of Render cold starts, expired credentials and lost acknowledgments. A repeat request returns the same server receipt and never deducts twice. No artificial keep-alive traffic.
-5. Tests for disconnect before/during/after upload, crash after central commit but before local acknowledgment, multiple devices, changed/deleted products, expired/revoked accounts, conflicting payloads and central financial/stock reconciliation.
-
-Only enable uploads against the verified actual Render URL. Until then the SQLite build explicitly labels sales as local/not uploaded and never transmits them.
+Phase 6 implements durable, authenticated and idempotent SQLite delivery through Express to Neon. See [SYNCHRONIZATION.md](SYNCHRONIZATION.md) for the additive migration and backups, API endpoints, inventory reconciliation, executed tests and Android acceptance procedure.
 
 ## Free-plan operating limits
 

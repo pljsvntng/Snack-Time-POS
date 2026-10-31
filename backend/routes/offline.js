@@ -1,4 +1,12 @@
 const router=require('express').Router();
 const {verifyToken,requireRole}=require('../middleware/auth');
 router.get('/bootstrap',verifyToken,requireRole('admin','cashier'),require('../controllers/offlineController').bootstrap);
+const sync=require('../controllers/syncController');
+const {authorizeSync,authorizeCatalog}=require('../utils/syncAuthentication');
+router.post('/catalog',authorizeCatalog,sync.catalog);
+router.post('/sales',authorizeSync,sync.upload);
+router.get('/sales/:clientId',authorizeSync,sync.saleStatus);
+router.get('/issues',require('../middleware/auth').verifyToken,requireRole('admin'),sync.issues);
+router.post('/reviews/:id/approve',require('../middleware/auth').verifyToken,requireRole('admin'),sync.approve);
+router.post('/conflicts/:id/resolve',require('../middleware/auth').verifyToken,requireRole('admin'),sync.resolveConflict);
 module.exports=router;

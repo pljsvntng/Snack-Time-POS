@@ -52,6 +52,7 @@ export default function POS() {
   };
 
   useEffect(() => { loadData(); }, []);
+  useEffect(() => { const refresh=()=>loadData();window.addEventListener('pos:catalogupdated',refresh);return()=>window.removeEventListener('pos:catalogupdated',refresh); }, [offline]);
 
   // Quietly re-reads product + ingredient stock (no loading skeleton). Returns the fresh list, or null on failure.
   const refreshProducts = async () => {

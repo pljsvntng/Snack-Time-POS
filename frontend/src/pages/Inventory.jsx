@@ -4,6 +4,7 @@ import { Plus, SlidersHorizontal, X } from 'lucide-react';
 import { api } from '../services/api';
 import { formatDateTime } from '../utils/currency';
 import Toast from '../components/Toast';
+import OfflineReconciliation from '../components/OfflineReconciliation';
 
 export default function Inventory() {
   const [ingredients, setIngredients] = useState([]);
@@ -68,9 +69,10 @@ export default function Inventory() {
       <div className="category-tabs">
         <button className={`category-tab ${tab === 'stock' ? 'active' : ''}`} onClick={() => setTab('stock')}>Current Stock</button>
         <button className={`category-tab ${tab === 'history' ? 'active' : ''}`} onClick={() => setTab('history')}>Transaction History</button>
+        <button className={`category-tab ${tab === 'sync' ? 'active' : ''}`} onClick={() => setTab('sync')}>Offline reconciliation</button>
       </div>
 
-      {tab === 'stock' ? (
+      {tab === 'sync' ? <OfflineReconciliation /> : tab === 'stock' ? (
         <div className="card">
           <TableScroll>
             <table className="data-table">

@@ -308,8 +308,9 @@ const getOrders = asyncHandler(async (req, res) => {
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const { rows: rows } = await pool.query(
-    `SELECT o.*, u.full_name AS cashier_name
-     FROM orders o JOIN users u ON o.user_id = u.id
+    `SELECT o.*, COALESCE(s.payload->'receipt'->>'cashier_name',u.full_name) AS cashier_name,
+       s.client_id AS offline_client_id,s.device_id AS offline_device_id,s.synced_at,s.status AS sync_status
+     FROM orders o JOIN users u ON o.user_id = u.id LEFT JOIN offline_sales s ON s.order_id=o.id
      ${where}
      ORDER BY o.created_at DESC
      LIMIT $${params.length + 1}`,
@@ -328,8 +329,11 @@ const getOrder = asyncHandler(async (req, res) => {
   }
 
   const { rows: orderRows } = await pool.query(
-    `SELECT o.*, u.full_name AS cashier_name, d.name AS discount_name
-     FROM orders o JOIN users u ON o.user_id = u.id LEFT JOIN discounts d ON o.discount_id = d.id
+    `SELECT o.*, COALESCE(s.payload->'receipt'->>'cashier_name',u.full_name) AS cashier_name,
+       CASE WHEN s.id IS NOT NULL THEN s.payload->'receipt'->>'discount_name' ELSE d.name END AS discount_name,
+       s.payload->'receipt'->'receipt_settings' AS receipt_settings,
+       s.client_id AS offline_client_id,s.device_id AS offline_device_id,s.synced_at,s.status AS sync_status
+     FROM orders o JOIN users u ON o.user_id = u.id LEFT JOIN discounts d ON o.discount_id = d.id LEFT JOIN offline_sales s ON s.order_id=o.id
      WHERE ${conditions.join(' AND ')}`,
     params
   );
