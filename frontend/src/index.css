@@ -818,8 +818,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--primary); outli
 @media (max-height: 559px) { .offline-status { padding: 4px 12px; } .offline-status small { display: none; } }
 @media print { .offline-status { display: none; } }
 /* Touch targets and wrapping for synchronization controls. */
-.sync-indicator { flex-wrap:wrap; }
-.sync-indicator small { flex-basis:100%; overflow-wrap:anywhere; }
+.sync-indicator { flex-wrap:wrap; max-height:35dvh; overflow-y:auto; overscroll-behavior:contain; }
+.sync-indicator small { display:block; flex-basis:100%; overflow-wrap:anywhere; }
 .sync-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .sync-actions button { min-height:44px; }
 .sync-review-row { border-top:1px solid var(--border); padding:16px 0; overflow-wrap:anywhere; }

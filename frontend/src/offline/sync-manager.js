@@ -68,6 +68,6 @@ export async function startSynchronization(store,{baseUrl,cacheSnapshot}={}){
  await Network.addListener('networkStatusChange',state=>manager.networkChanged(state.connected));
  await App.addListener('appStateChange',state=>{if(state.isActive)manager.kick({refresh:true});});
  window.addEventListener('pos:offlineupdated',()=>manager.kick());window.addEventListener('pos:authorized',()=>manager.kick({retry:true,refresh:true}));window.addEventListener('pos:syncretry',()=>manager.kick({retry:true,refresh:true}));
- window.addEventListener('pos:cartpersisted',async()=>{if((await store.syncStatus()).catalogDeferred)manager.kick({refresh:true});});
+ window.addEventListener('pos:cartpersisted',async()=>{try{if((await store.syncStatus()).catalogDeferred)manager.kick({refresh:true});}catch{await manager.emit({error:'SQLite is unavailable. Saved receipts will be checked again on retry.'});}});
  manager.kick({refresh:true});return manager;
 }

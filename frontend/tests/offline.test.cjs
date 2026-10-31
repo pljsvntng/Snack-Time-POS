@@ -66,6 +66,17 @@ test('cash-only rules, prices, required options, duplicate ids and immutable rec
 test('new authorization cannot reset deducted stock or erase local sales',async()=>{
  const f=await fixture();try{await f.store.checkout(f.request);const result=await f.store.enroll({password:PASSWORD,alias:'cashier1',grant:f.grant(),snapshot:f.snapshot});assert.equal(result.retainedStock,true);assert.equal((await f.store.catalog('products'))[0].stock,8);assert.equal((await f.store.listOrders()).length,1);}finally{f.cleanup();}
 });
+test('version 1 upgrade backfills immutable pending delivery without altering saved receipts',async()=>{
+ const f=await fixture();try{
+  await f.store.checkout(f.request);const original=(await f.driver.query('SELECT receipt_json FROM local_orders'))[0].receipt_json;
+  // This disposable SQLite fixture models the previous release: no delivery table.
+  await f.driver.execute('DROP TABLE sync_outbox; PRAGMA user_version=1;');
+  const {OfflineStore}=await import('../src/offline/store.js');const upgraded=new OfflineStore(f.driver,f.data.publicKey);await upgraded.initialize();
+  assert.equal((await f.driver.query('PRAGMA user_version'))[0].user_version,2);assert.equal((await f.driver.query('SELECT receipt_json FROM local_orders'))[0].receipt_json,original);
+  const rows=await upgraded.deliveryRows();assert.equal(rows.length,1);assert.equal(rows[0].payload.protocol_version,0);assert.equal(rows[0].state,'pending');assert.equal(rows[0].payload.movements.length,2);assert.equal((await upgraded.syncStatus()).pending,1);
+  await upgraded.login('cashier1',PASSWORD);assert.equal((await upgraded.listOrders()).length,1);assert.equal((await upgraded.catalog('products'))[0].stock,8);
+ }finally{f.cleanup();}
+});
 test('local history is scoped to the authorized cashier and receipts keep their original settings',async()=>{
  const f=await fixture();try{
   const receipt=await f.store.checkout(f.request);await f.store.enroll({password:PASSWORD,alias:'cashier2',grant:f.grant(2),snapshot:{...f.snapshot,user_id:2,settings:{business_name:'Changed name'},orders:[]}});

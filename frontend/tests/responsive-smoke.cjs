@@ -5,7 +5,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const root=path.resolve(__dirname,'../..');
-const site='http://127.0.0.1:15180', api='http://127.0.0.1:14801';
+const remote=process.env.TEST_REMOTE_SITE;
+if(remote){const url=new URL(remote);if(url.protocol!=='https:'||!url.hostname.endsWith('.onrender.com'))throw Error('Use the real Render HTTPS origin.');const accounts=require('../../backend/utils/ownerCredentialVault').ownerAccounts();process.env.TEST_ADMIN_PASSWORD=accounts.find(a=>a.username==='admin').password;process.env.TEST_CASHIER_PASSWORD=accounts.find(a=>a.username==='juan').password;}
+const site=remote||'http://127.0.0.1:15180', api=remote||'http://127.0.0.1:14801';
 const artifacts=path.join(root,'database/backups/responsive-verification');
 const sizes=[['small-phone',320,640],['phone',360,800],['phone-large',393,852],['phone-wide',412,915],['small-tablet',600,960],['tablet-portrait',768,1024],['tablet-tall',800,1280],['tablet-landscape',1024,768],['tablet-wide',1280,800],['phone-landscape',852,393],['desktop',1440,900]];
 const routes=['dashboard','products','inventory','transactions','reports','users','settings'];
@@ -20,8 +22,8 @@ async function reachable(locator,label){await locator.scrollIntoViewIfNeeded();a
  if(!process.env.TEST_ADMIN_PASSWORD)process.env.TEST_ADMIN_PASSWORD=await require('../../backend/utils/hiddenPrompt').hiddenPrompt('Administrator test password (hidden): ');
  if(!process.env.TEST_CASHIER_PASSWORD)process.env.TEST_CASHIER_PASSWORD=await require('../../backend/utils/hiddenPrompt').hiddenPrompt('Cashier test password (hidden): ');
  fs.mkdirSync(artifacts,{recursive:true});
- const backend=spawn(process.execPath,[path.join(root,'backend/server.js')],{cwd:root,env:{...process.env,PORT:'14801',CLIENT_ORIGIN:site},stdio:'ignore',windowsHide:true});
- const vite=spawn(process.execPath,[path.join(root,'frontend/node_modules/vite/bin/vite.js'),'--host','127.0.0.1','--port','15180','--strictPort'],{cwd:path.join(root,'frontend'),env:{...process.env,VITE_API_URL:api+'/api'},stdio:'ignore',windowsHide:true});
+ const backend=remote?null:spawn(process.execPath,[path.join(root,'backend/server.js')],{cwd:root,env:{...process.env,PORT:'14801',CLIENT_ORIGIN:site},stdio:'ignore',windowsHide:true});
+ const vite=remote?null:spawn(process.execPath,[path.join(root,'frontend/node_modules/vite/bin/vite.js'),'--host','127.0.0.1','--port','15180','--strictPort'],{cwd:path.join(root,'frontend'),env:{...process.env,VITE_API_URL:api+'/api'},stdio:'ignore',windowsHide:true});
  let browser;const summary=[];
  try{
   await Promise.all([wait(api+'/api/health'),wait(site)]);
@@ -55,7 +57,8 @@ async function reachable(locator,label){await locator.scrollIntoViewIfNeeded();a
      await p.setViewportSize({width,height});
      await p.waitForFunction(()=>getComputedStyle(document.querySelector('.cart-fab')).display!=='none');
    }
-   for(const target of [cart.getByRole('button',{name:'Increase quantity'}),cart.getByRole('button',{name:'Remove',exact:false})]){const b=await target.boundingBox();assert.ok(b.height>=44&&b.width>=44,name+' touch target too small');}
+   // Transformed bottom-sheet coordinates can round 44 CSS pixels fractionally.
+   for(const target of [cart.getByRole('button',{name:'Increase quantity'}),cart.getByRole('button',{name:'Remove',exact:false})]){const b=await target.boundingBox();assert.ok(b.height>=43.99&&b.width>=43.99,name+' touch target too small: '+JSON.stringify(b));}
    await reachable(cart.getByLabel('Discount'),name+' discount');await cart.getByLabel('Discount').selectOption('2');
    await reachable(cart.getByRole('button',{name:'Complete Order'}),name+' checkout');await cart.getByRole('button',{name:'Complete Order'}).click();const payment=p.locator('.payment-modal');await payment.waitFor();
    await payment.getByLabel('Cash Received').fill('100');await reachable(payment.getByRole('button',{name:'Confirm Payment'}),name+' payment');
@@ -86,12 +89,12 @@ async function reachable(locator,label){await locator.scrollIntoViewIfNeeded();a
   }
   const cashierContext=await context({viewport:{width:393,height:852},isMobile:true,hasTouch:true});const cashier=await cashierContext.newPage();
   await cashier.goto(site+'/login',{waitUntil:'domcontentloaded'});
-  await cashier.locator('#username').fill(process.env.TEST_CASHIER_USER||'juan');await cashier.locator('#password').fill(process.env.TEST_CASHIER_PASSWORD);
-  await cashier.getByRole('button',{name:'Log in',exact:true}).click();await cashier.waitForURL('**/pos');
+  if(remote){const session=await require('../../backend/tests/live-readonly-session.cjs')();await cashier.evaluate(s=>{localStorage.setItem('fh_token',s.token);localStorage.setItem('fh_user',JSON.stringify(s.user));},session);await cashier.goto(site+'/pos',{waitUntil:'domcontentloaded'});}
+  else{await cashier.locator('#username').fill(process.env.TEST_CASHIER_USER||'juan');await cashier.locator('#password').fill(process.env.TEST_CASHIER_PASSWORD);await cashier.getByRole('button',{name:'Log in',exact:true}).click();await cashier.waitForURL('**/pos');}
   await cashier.getByRole('button',{name:'Open menu',exact:true}).click();const nav=cashier.locator('#navigation-drawer');await nav.waitFor({state:'visible'});
   assert.equal(await nav.locator('a').count(),2,'Cashier navigation keeps its existing role restrictions');
   await nav.getByRole('link',{name:'My Transactions',exact:true}).click();await cashier.waitForURL('**/transactions');await nav.waitFor({state:'hidden'});
   await contained(cashier,'cashier transactions');await cashierContext.close();console.log('PASS mobile cashier navigation');
   fs.writeFileSync(path.join(artifacts,process.env.RESPONSIVE_CASES?'additional-results.json':'results.json'),JSON.stringify(summary,null,2));console.log('Responsive checks passed at '+summary.length+' screen sizes; no production writes.');
- }finally{if(browser)await browser.close();backend.kill();vite.kill();}
+ }finally{if(browser)await browser.close();backend?.kill();vite?.kill();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

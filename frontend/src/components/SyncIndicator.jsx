@@ -9,6 +9,7 @@ export default function SyncIndicator(){
   <button className="btn btn-outline btn-sm" disabled={!offline&&!offlineStatus?.preparedAt} onClick={async()=>{await switchMode(!offline);navigate('/login');}}>{offline?'Sign in online':'Use offline POS'}</button></div>
   <small>Last successful upload: {s?.lastSuccess?new Date(s.lastSuccess).toLocaleString('en-PH'):'No sales uploaded yet'}. Saved receipts remain on this device.</small>
   {s?.authRequired>0&&<small>Sign in online again to authorize pending uploads.</small>}
+  {s?.blocked>0&&<small role="alert">{s.blocked} sale(s) could not be accepted. Retry to view the server response; saved receipts remain intact.</small>}
   {s?.review>0&&<small>{s.review} archived sale(s) need administrator approval in Inventory → Offline reconciliation.</small>}
   {(s?.error||s?.catalogError||offlineStatus?.warning)&&<small role="alert">{s?.error||s?.catalogError||offlineStatus?.warning}</small>}
   {offline&&<small>Stock snapshot: {s?.catalogAt?new Date(s.catalogAt).toLocaleString('en-PH'):'unavailable'}. Other devices may have sold the same stock.</small>}

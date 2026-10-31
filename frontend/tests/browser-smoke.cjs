@@ -85,11 +85,12 @@ async function wait(url) {
     await page.getByRole('button',{name:'Complete Order',exact:false}).click();await page.getByText('Cash Received',{exact:true}).waitFor();
     await page.getByRole('button',{name:'Cancel',exact:true}).click();console.log('PASS: customized cart, discount control and payment dialog');
     await page.getByRole('button',{name:'Log out',exact:false}).click();await page.waitForURL('**/login');
-    await page.locator('#username').fill(process.env.TEST_CASHIER_USER || 'juan');await page.locator('#password').fill(process.env.TEST_CASHIER_PASSWORD);
-    await page.getByRole('button',{name:'Log in',exact:true}).click();await page.waitForURL('**/pos');
+    if(remote){const session=await require('../../backend/tests/live-readonly-session.cjs')();await page.evaluate(s=>{localStorage.setItem('fh_token',s.token);localStorage.setItem('fh_user',JSON.stringify(s.user));},session);await page.goto(site+'/pos',{waitUntil:'domcontentloaded'});}
+    else{await page.locator('#username').fill(process.env.TEST_CASHIER_USER || 'juan');await page.locator('#password').fill(process.env.TEST_CASHIER_PASSWORD);await page.getByRole('button',{name:'Log in',exact:true}).click();await page.waitForURL('**/pos');}
     assert.equal(await page.locator('.cart-item').count(),0,'Cart must not leak across users');
     await page.goto(site+'/products',{waitUntil:'domcontentloaded'});await page.waitForURL('**/pos');console.log('PASS: cashier role restrictions and logout cart cleanup');
     assert.deepEqual(errors,[]);assert.deepEqual(apiFailures,[]);
     console.log('Browser smoke passed with no JavaScript or API errors; no production writes performed.');
+    if(remote)console.log('Cashier permissions used an owner-generated read-only test session; its password was preserved, not retested.');
   }finally{if(browser)await browser.close();backend?.kill();vite?.kill();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
