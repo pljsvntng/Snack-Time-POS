@@ -20,12 +20,10 @@ test('PostgreSQL POS API regression suite', async (t) => {
     await admin.query(fs.readFileSync(path.join(__dirname, '../../database/schema.postgresql.sql'), 'utf8'));
     const seed = fs.readFileSync(path.join(__dirname, '../../database/seed.sql'), 'utf8').replace(/USE foodtrip_house_pos;/, '');
     await admin.query(seed);
+    const hash = await require('bcrypt').hash('test-password', 4);
+    await admin.query("INSERT INTO users(id,role_id,full_name,username,email,password_hash,active) VALUES (1,1,'Test Admin','admin','admin@test.invalid',$1,1),(2,2,'Test Cashier','juan','cashier@test.invalid',$1,1)",[hash]);
     const {rows:identities} = await admin.query("SELECT table_name,column_name FROM information_schema.columns WHERE table_schema='public' AND is_identity='YES'");
     for (const col of identities) await admin.query('SELECT setval(pg_get_serial_sequence($1,$2),COALESCE((SELECT MAX("' + col.column_name + '") FROM "' + col.table_name + '"),0)+1,false)',[col.table_name,col.column_name]);
-    const { rows: seedUsers } = await admin.query('SELECT username, password_hash FROM users');
-    for (const user of seedUsers) assert.equal(await require('bcrypt').compare(user.username === 'admin' ? 'admin123' : 'cashier123', user.password_hash), true);
-    const hash = await require('bcrypt').hash('test-password', 4);
-    await admin.query('UPDATE users SET password_hash = $1', [hash]);
     process.env.PG_DATABASE = database;
     pool = require('../config/db');
     const express = require('express');
@@ -37,10 +35,22 @@ test('PostgreSQL POS API regression suite', async (t) => {
     const base = `http://127.0.0.1:${server.address().port}/api`;
     async function request(url, method = 'GET', body, token, status = 200) {
       const res = await fetch(base + url, { method, headers: { 'Content-Type': 'application/json', ...(token ? {Authorization: `Bearer ${token}`} : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
-      const data = await res.json(); assert.equal(res.status, status, `${method} ${url}: ${JSON.stringify(data)}`); return data;
+      const data = await res.json(); assert.equal(res.status, status, `${method} ${url}: HTTP ${res.status}`); return data;
     }
     const login = name => request('/auth/login', 'POST', {username: name, password: 'test-password'});
     const a = (await login('admin')).token, c = (await login('juan')).token;
+    await t.test('administrator password policy and database role authority',async()=>{
+      await request('/users','POST',{full_name:'Weak admin',username:'weak-admin',password:'short-password',role:'admin'},a,400);
+      await request('/users','POST',{full_name:'Weak admin',username:'weak-admin',password:'short-password',role:'ADMIN'},a,400);
+      await request('/users/2','PUT',{role:'admin'},a,400);
+      await request('/users/2','PUT',{role:'ADMIN'},a,400);
+      const password=require('crypto').randomBytes(24).toString('base64url');
+      const created=await request('/users','POST',{full_name:'Strong admin',username:'strong-admin',password,role:'admin'},a,201);
+      const {rows:[record]}=await admin.query('SELECT password_hash FROM users WHERE id=$1',[created.id]);assert.equal(require('bcrypt').getRounds(record.password_hash),12);assert.equal(await require('bcrypt').compare(password,record.password_hash),true);
+      const {rows:[cashier]}=await admin.query('SELECT password_hash FROM users WHERE id=2');
+      const forgedRole=require('jsonwebtoken').sign({id:2,role:'admin',credentialVersion:require('crypto').createHash('sha256').update(cashier.password_hash).digest('hex')},process.env.JWT_SECRET,{expiresIn:'1m'});
+      await request('/users','GET',undefined,forgedRole,403);
+    });
     await t.test('authentication and authorization', async () => {
       await request('/auth/login', 'POST', {username: 'admin', password: 'wrong'}, null, 401);
       await request('/products', 'GET', undefined, null, 401);

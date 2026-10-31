@@ -1,7 +1,6 @@
 -- ============================================================
 -- FOODTRIP HOUSE POS - SEED DATA
 -- Run AFTER schema.sql
--- Passwords below are bcrypt hashes for: admin123 / cashier123
 -- (see README for how to regenerate hashes)
 -- ============================================================
 
@@ -12,13 +11,9 @@ USE foodtrip_house_pos;
 -- ------------------------------------------------------------
 INSERT INTO roles (id, name) VALUES (1,'admin'), (2,'cashier');
 
--- password: admin123
-INSERT INTO users (role_id, full_name, username, email, password_hash, active) VALUES
-(1, 'Admin User', 'admin', 'admin@foodtriphouse.com', '$2b$10$LZ8JR3KQA7O92Lap0WkPkuFzamM88Y4vSLwJ4E14FtvyE9GxSAQli', 1);
+-- No login credentials are seeded. Create the first administrator with admin:setup.
 
--- password: cashier123
-INSERT INTO users (role_id, full_name, username, email, password_hash, active) VALUES
-(2, 'Juan Dela Cruz', 'juan', 'juan@foodtriphouse.com', '$2b$10$Y10arNv7HfPnnI/aYKNhEubagm.knR0Gqo1wzVF7.hb21yIY6cgWW', 1);
+
 
 -- ------------------------------------------------------------
 -- CATEGORIES
@@ -95,7 +90,6 @@ INSERT INTO options (option_group_id, name, price_modifier, display_order) VALUE
 -- ------------------------------------------------------------
 -- PRODUCTS: DRINKS (standalone)
 -- NOTE: no standalone price was specified in the source brief (drinks
--- were only priced as part of combos). A default price of ₱20 is used
 -- here as a placeholder -- change it in Admin > Products before going live.
 -- ------------------------------------------------------------
 INSERT INTO products (id, category_id, name, description, price, image, sku) VALUES

@@ -155,10 +155,6 @@ export default function Login() {
             </button>
           </form>
 
-          {!import.meta.env.PROD && <><div className="login-or" aria-hidden="true"><span>or</span></div>
-          <p className="login-hint">
-            Demo accounts — Admin: admin / admin123 · Cashier: juan / cashier123
-          </p></>}
         </div>
 
         <svg className="login-blob" viewBox="0 0 280 280" aria-hidden="true">

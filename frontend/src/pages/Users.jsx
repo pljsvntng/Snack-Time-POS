@@ -106,7 +106,8 @@ export default function Users() {
                 </div>
                 <div className="form-group">
                   <label htmlFor="users-field-4">{editingId ? 'New Password (leave blank to keep current)' : 'Password'}</label>
-                  <input id="users-field-4" type="password" required={!editingId} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+                  <input id="users-field-4" type="password" autoComplete="new-password" minLength={form.role==='admin'?15:6} required={!editingId} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+                  {form.role==='admin'&&<small>Use a unique passphrase of at least 15 characters, up to 72 UTF-8 bytes.</small>}
                 </div>
                 <div className="form-group">
                   <label htmlFor="users-field-5">Role</label>

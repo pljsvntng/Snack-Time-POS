@@ -2,12 +2,13 @@ const {chromium}=require('playwright'),{spawn}=require('node:child_process'),fs=
 const root=path.resolve(__dirname,'../..'),site='http://127.0.0.1:15181',remote=process.env.TEST_REMOTE_API;
 if(remote){
  const url=new URL(remote);if(url.protocol!=='https:'||!url.hostname.endsWith('.onrender.com'))throw Error('Use the actual Render HTTPS origin for remote offline acceptance.');
- const dotenv=require('../../backend/node_modules/dotenv');const accounts=JSON.parse(dotenv.parse(fs.readFileSync(path.join(root,'backend/.env.cloud-credentials'))).CLOUD_ACCOUNTS_JSON);
+ const dotenv=require('../../backend/node_modules/dotenv');const accounts=require('../../backend/utils/ownerCredentialVault').ownerAccounts();
  process.env.TEST_ADMIN_PASSWORD=accounts.find(a=>a.username==='admin').password;
  process.env.DATABASE_URL=dotenv.parse(fs.readFileSync(path.join(root,'backend/.env.neon'))).DATABASE_URL;
 }
 async function wait(url){for(let i=0;i<160;i++){try{if((await fetch(url)).ok)return;}catch{}await new Promise(r=>setTimeout(r,250));}throw Error('Startup: '+url);}
 (async()=>{
+ if(!process.env.TEST_ADMIN_PASSWORD)process.env.TEST_ADMIN_PASSWORD=await require('../../backend/utils/hiddenPrompt').hiddenPrompt('Administrator test password (hidden): ');
  const {OfflineStore}=await import('../src/offline/store.js'),{openTestDatabase}=await import('./offline/node-driver.mjs');
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'snacktime-offline-ui-')),file=path.join(dir,'pos.sqlite');
  const publicKey=JSON.parse(fs.readFileSync(path.join(root,'frontend/src/offline/server-public-key.json')));
@@ -23,7 +24,7 @@ async function wait(url){for(let i=0;i<160;i++){try{if((await fetch(url)).ok)ret
  try{
   await Promise.all([wait(site),wait((remote||'http://127.0.0.1:14803')+'/api/health')]);browser=await chromium.launch({headless:true,executablePath:process.env.TEST_CHROME||'C:/Program Files/Google/Chrome/Application/chrome.exe'});
   async function page(){const c=await browser.newContext({viewport:{width:393,height:852},isMobile:true,hasTouch:true});const p=await c.newPage();p.setDefaultTimeout(60000);p.on('pageerror',e=>{errors.push(e.message);console.error('UI error:',e.message);});await p.route('https://pos.test/**',async r=>{if(!online)return r.abort();const response=await r.fetch({url:r.request().url().replace('https://pos.test',remote||'http://127.0.0.1:14803'),...(remote?{headers:{...r.request().headers(),origin:'https://localhost'}}:{})});return r.fulfill({response,headers:{...response.headers(),'access-control-allow-origin':site}});});await p.goto(site+'/login',{waitUntil:'commit',timeout:60000});await p.locator('#username').waitFor({timeout:120000});return p;}
-  async function login(p){await p.locator('#username').fill('admin');await p.locator('#password').fill(process.env.TEST_ADMIN_PASSWORD||'admin123');await p.getByRole('button',{name:'Log in',exact:true}).click();await p.waitForURL(/\/(dashboard|pos)$/);}
+  async function login(p){await p.locator('#username').fill('admin');await p.locator('#password').fill(process.env.TEST_ADMIN_PASSWORD);await p.getByRole('button',{name:'Log in',exact:true}).click();await p.waitForURL(/\/(dashboard|pos)$/);}
   let p=await page();await login(p);assert.ok((await store.status()).preparedAt);console.log('PASS Android-flow online authorization and local catalog preparation');
   await p.getByRole('button',{name:'Use offline POS',exact:true}).click();await p.waitForURL('**/login');online=false;await login(p);await p.locator('.product-card').first().waitFor();
   await p.getByPlaceholder('Search products...').fill('Plain Burger');await p.locator('.product-card').first().click();await p.locator('.cart-fab').click();await p.getByLabel('Discount',{exact:true}).selectOption('2');await p.getByRole('button',{name:'Close order'}).click();

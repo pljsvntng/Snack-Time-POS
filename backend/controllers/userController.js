@@ -3,6 +3,7 @@ const pool = require('../config/db');
 const { text, flag } = require('../utils/validation');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
+const {administratorPassword}=require('../utils/passwordPolicy');
 
 // GET /api/users (admin)
 const getUsers = asyncHandler(async (req, res) => {
@@ -22,10 +23,11 @@ const createUser = asyncHandler(async (req, res) => {
   text(full_name, 'Full name'); text(username, 'Username'); text(password, 'Password');
   if (password.length < 6) throw new ApiError(400, 'Password must be at least 6 characters.');
 
-  const { rows: roleRows } = await pool.query(`SELECT id FROM roles WHERE name = $1`, [role]);
+  const { rows: roleRows } = await pool.query(`SELECT id,name FROM roles WHERE name = $1`, [role]);
   if (!roleRows.length) throw new ApiError(400, 'Invalid role.');
+  if(roleRows[0].name==='admin')administratorPassword(password);
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(password, 12);
   const result = await pool.query(
     `INSERT INTO users (role_id, full_name, username, email, password_hash) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
     [roleRows[0].id, full_name.trim(), username.trim(), email || null, passwordHash]
@@ -39,21 +41,24 @@ const updateUser = asyncHandler(async (req, res) => {
   if (full_name !== undefined) text(full_name, 'Full name');
   if (active !== undefined) flag(active, 'Active');
 
-  const { rows: existing } = await pool.query(`SELECT id FROM users WHERE id = $1`, [req.params.id]);
+  const { rows: existing } = await pool.query(`SELECT u.id,r.name AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id = $1`, [req.params.id]);
   if (!existing.length) throw new ApiError(404, 'User not found.');
 
-  let roleId = null;
+  let roleId = null, requestedRoleName=null;
   if (role) {
-    const { rows: roleRows } = await pool.query(`SELECT id FROM roles WHERE name = $1`, [role]);
+    const { rows: roleRows } = await pool.query(`SELECT id,name FROM roles WHERE name = $1`, [role]);
     if (!roleRows.length) throw new ApiError(400, 'Invalid role.');
     roleId = roleRows[0].id;
+    requestedRoleName=roleRows[0].name;
   }
+  if(requestedRoleName==='admin'&&existing[0].role!=='admin'&&!password)throw new ApiError(400,'Provide a strong new password when granting administrator access.');
 
   let passwordHash = null;
   if (password) {
     text(password, 'Password');
     if (password.length < 6) throw new ApiError(400, 'Password must be at least 6 characters.');
-    passwordHash = await bcrypt.hash(password, 10);
+    if(requestedRoleName==='admin'||existing[0].role==='admin')administratorPassword(password);
+    passwordHash = await bcrypt.hash(password, 12);
   }
 
   await pool.query(

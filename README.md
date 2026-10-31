@@ -39,14 +39,7 @@ foodtrip-house-pos/
 └── .env.example     copy to backend/.env
 ```
 
-**Demo login accounts** (seeded, password hashes already in `seed.sql`):
-
-| Role    | Username | Password    |
-|---------|----------|-------------|
-| Admin   | `admin`  | `admin123`  |
-| Cashier | `juan`   | `cashier123`|
-
----
+**Administrator access:** see [ADMIN-ACCESS.md](ADMIN-ACCESS.md). Credentials are not seeded or embedded in the application. Existing accounts are preserved.
 
 ## 2. Setup — step by step (beginner friendly)
 
@@ -126,22 +119,13 @@ npm run dev
 Vite will print a local URL, normally `http://localhost:5173`. Open that in your browser.
 
 ### Step 10 — Log in
-Use one of the demo accounts above. Cashiers land on the POS screen; admins land on the Dashboard.
+Use your existing administrator account or follow ADMIN-ACCESS.md to provision a new database securely.
 
 ---
 
-## 3. Regenerating password hashes (optional)
+## 3. Secure administrator setup and recovery
 
-The seeded password hashes correspond to `admin123` and `cashier123`. If you want to set your own
-password for a new user via SQL directly (instead of the Admin → Users screen, which does this for
-you automatically), generate a bcrypt hash with:
-```bash
-cd backend
-node utils/generateHash.js yourNewPassword
-```
-Paste the printed hash into the `password_hash` column.
-
----
+Run `npm --prefix backend run admin:status -- --target cloud` to inspect administrator status. Use `admin:setup` only for a database with no administrator, or `admin:reset -- --target cloud --username admin` to intentionally change a forgotten password through hidden prompts. Never pass passwords as command arguments or generate/print hashes manually. See [ADMIN-ACCESS.md](ADMIN-ACCESS.md).
 
 ## 4. How the core workflow works
 

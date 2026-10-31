@@ -17,6 +17,8 @@ async function contained(page,label){
 }
 async function reachable(locator,label){await locator.scrollIntoViewIfNeeded();assert.ok(await locator.isVisible(),label+' hidden');assert.ok(await locator.evaluate(e=>{const r=e.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1&&r.top>=-1&&r.bottom<=innerHeight+1;}),label+' offscreen');}
 (async()=>{
+ if(!process.env.TEST_ADMIN_PASSWORD)process.env.TEST_ADMIN_PASSWORD=await require('../../backend/utils/hiddenPrompt').hiddenPrompt('Administrator test password (hidden): ');
+ if(!process.env.TEST_CASHIER_PASSWORD)process.env.TEST_CASHIER_PASSWORD=await require('../../backend/utils/hiddenPrompt').hiddenPrompt('Cashier test password (hidden): ');
  fs.mkdirSync(artifacts,{recursive:true});
  const backend=spawn(process.execPath,[path.join(root,'backend/server.js')],{cwd:root,env:{...process.env,PORT:'14801',CLIENT_ORIGIN:site},stdio:'ignore',windowsHide:true});
  const vite=spawn(process.execPath,[path.join(root,'frontend/node_modules/vite/bin/vite.js'),'--host','127.0.0.1','--port','15180','--strictPort'],{cwd:path.join(root,'frontend'),env:{...process.env,VITE_API_URL:api+'/api'},stdio:'ignore',windowsHide:true});
@@ -27,7 +29,7 @@ async function reachable(locator,label){await locator.scrollIntoViewIfNeeded();a
   async function context(options={}){const c=await browser.newContext(options);await c.route('https://fonts.googleapis.com/**',r=>r.abort());await c.route('https://fonts.gstatic.com/**',r=>r.abort());await c.route('**/api/**',r=>['GET','OPTIONS'].includes(r.request().method())||r.request().url().endsWith('/auth/login')?r.continue():r.abort());return c;}
   const loginContext=await context({viewport:{width:393,height:852},isMobile:true,hasTouch:true});const login=await loginContext.newPage();
   await login.goto(site+'/login',{waitUntil:'domcontentloaded'});await contained(login,'phone login');
-  await login.locator('#username').fill(process.env.TEST_ADMIN_USER||'admin');await login.locator('#password').fill(process.env.TEST_ADMIN_PASSWORD||'admin123');
+  await login.locator('#username').fill(process.env.TEST_ADMIN_USER||'admin');await login.locator('#password').fill(process.env.TEST_ADMIN_PASSWORD);
   await login.getByRole('button',{name:'Log in',exact:true}).click();await login.waitForURL('**/dashboard');const storageState=await loginContext.storageState();await loginContext.close();
   for(const [name,width,height] of sizes.filter(entry=>!process.env.RESPONSIVE_CASES || process.env.RESPONSIVE_CASES.split(',').includes(entry[0]))){
    const c=await context({viewport:{width,height},isMobile:width<1200,hasTouch:true,storageState});const p=await c.newPage();p.setDefaultTimeout(30000);const errors=[];
@@ -84,7 +86,7 @@ async function reachable(locator,label){await locator.scrollIntoViewIfNeeded();a
   }
   const cashierContext=await context({viewport:{width:393,height:852},isMobile:true,hasTouch:true});const cashier=await cashierContext.newPage();
   await cashier.goto(site+'/login',{waitUntil:'domcontentloaded'});
-  await cashier.locator('#username').fill(process.env.TEST_CASHIER_USER||'juan');await cashier.locator('#password').fill(process.env.TEST_CASHIER_PASSWORD||'cashier123');
+  await cashier.locator('#username').fill(process.env.TEST_CASHIER_USER||'juan');await cashier.locator('#password').fill(process.env.TEST_CASHIER_PASSWORD);
   await cashier.getByRole('button',{name:'Log in',exact:true}).click();await cashier.waitForURL('**/pos');
   await cashier.getByRole('button',{name:'Open menu',exact:true}).click();const nav=cashier.locator('#navigation-drawer');await nav.waitFor({state:'visible'});
   assert.equal(await nav.locator('a').count(),2,'Cashier navigation keeps its existing role restrictions');

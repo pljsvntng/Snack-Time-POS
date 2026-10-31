@@ -18,7 +18,7 @@ const login = asyncHandler(async (req, res) => {
     [username.trim(), username.trim()]
   );
 
-  const user = rows[0];
+  const user = rows.length===1?rows[0]:null;
   if (!user || !user.active) {
     throw new ApiError(401, 'Invalid username or password.');
   }

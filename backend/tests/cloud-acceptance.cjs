@@ -3,7 +3,7 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
 const {spawn}=require('node:child_process'),dotenv=require('dotenv');
 const root=path.resolve(__dirname,'../..');
 const privateEnv=dotenv.parse(fs.readFileSync(path.join(root,'backend/.env.render')));
-const accounts=JSON.parse(dotenv.parse(fs.readFileSync(path.join(root,'backend/.env.cloud-credentials'))).CLOUD_ACCOUNTS_JSON);
+const accounts=require('../utils/ownerCredentialVault').ownerAccounts();
 const qaHost=process.env.POS_QA_HOST,productionUrl=new URL(privateEnv.DATABASE_URL);
 if(!qaHost||!qaHost.endsWith('.neon.tech')||qaHost===productionUrl.hostname||qaHost.replace('-pooler','')===productionUrl.hostname.replace('-pooler',''))throw Error('A separate POS_QA_HOST Neon test branch is required.');
 const qaUrl=new URL(productionUrl);qaUrl.hostname=qaHost;

@@ -21,7 +21,7 @@ function errorHandler(err, req, res, next) {
     return res.status(409).json({ error: 'This action conflicts with related records.' });
   }
 
-  console.error('[Unhandled error]', { code: err.code, message: err.message });
+  console.error('[Unhandled error]', { code: /^[A-Z0-9_]{1,40}$/.test(err.code||'')?err.code:'UNEXPECTED' });
   return res.status(500).json({ error: 'Something went wrong on our end. Please try again.' });
 }
 

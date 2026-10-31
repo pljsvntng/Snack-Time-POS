@@ -13,7 +13,7 @@ async function verifyToken(req, res, next) {
   }
 
   let payload;
-  try { payload = jwt.verify(token, process.env.JWT_SECRET); }
+  try { payload = jwt.verify(token, process.env.JWT_SECRET,{algorithms:['HS256']}); }
   catch { return next(new ApiError(401, 'Your session has expired. Please log in again.')); }
   try {
     const { rows: [user] } = await pool.query(

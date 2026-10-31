@@ -4,7 +4,7 @@ Status: deployed on Render Free at **https://snack-time-pos.onrender.com**, usin
 
 The deployed source is the `codex/offline-render-neon` branch of `pljsvntng/Snack-Time-POS`. Automatic deployment is disabled. Render service `srv-dbiv84g473hc73ao5cqg` is in **My Workspace**, region Ohio, with compute plan **free**. Neon organization plan **free** was verified. No paid database, disk, worker or service was created. Render uses its default TCP service probe; `/api/health` has been checked directly over HTTPS.
 
-Migration evidence is private under `database/backups/postgresql-2026-10-31T13-49-12-954Z/neon-validation.json`. All 445 source records and 12 orders matched before the owner-approved cloud password rotation; all 22 referenced product photos were copied and checked. Original password hashes remain in the verified backups and local databases. New passwords for the cloud copies of `admin` and `juan` are in ignored `backend/.env.cloud-credentials`; do not paste them into chat or Git. `CLOUD_ACCOUNTS_JSON` lists each username and its password.
+Migration evidence is private under `database/backups/postgresql-2026-10-31T13-49-12-954Z/neon-validation.json`. All 445 source records and 12 orders matched before the owner-approved cloud password rotation; all 22 referenced product photos were copied and checked. Original password hashes remain in the verified backups and local databases. The existing cloud logins were subsequently moved into Windows DPAPI-protected owner storage without resetting them. See ADMIN-ACCESS.md for hidden password setup/reset commands; no plaintext administrator password file is used.
 
 Live HTTPS browser checks cover real login, both roles, dashboard charts, catalog, inventory, users, settings, history, receipt/report print rendering, customized carts, payment dialogs and logout cleanup without writing production sales. The isolated Neon QA branch `codex-deployment-qa-20261031` exercises sales writes, all tender types, discounts, exact stock/money, user/settings edits and photo persistence; its records are not production sales. The branch is within the Free plan's included branch allowance and retains the account's default suspend behavior.
 
@@ -54,16 +54,9 @@ An import or validation failure stops the process. A failed target is not automa
 
 ## 3. Cloud passwords and secrets
 
-The migration first preserves password hashes exactly. The source currently has known demo credentials. Public cloud startup refuses those passwords. Change affected **cloud** accounts before deploying, keeping local credentials unchanged. Set a chosen account and a unique password in ignored `backend/.env.cloud-credentials`:
+Use the owner-only commands in [ADMIN-ACCESS.md](ADMIN-ACCESS.md). Check with `npm --prefix backend run admin:status -- --target cloud`. Choose a new administrator password only by explicitly running `admin:reset -- --target cloud --username admin` in a private terminal; input is hidden and PostgreSQL receives a salted bcrypt hash. Existing accounts/passwords are not automatically changed. Do not recreate plaintext login configuration files or print hashes.
 
-```dotenv
-CLOUD_USERNAME=<existing username>
-CLOUD_NEW_PASSWORD=<unique password with at least 12 characters>
-```
-
-Run `node backend/scripts/change-cloud-password.js`, repeat for each affected account, verify sign-in, then remove the private password entry. The helper accepts only a Neon target and uses bcrypt; it does not touch local databases. Real-device initial online authorization must use these cloud credentials.
-
-Run `node backend/scripts/prepare-render-env.js` to generate ignored `backend/.env.render`. It retains the existing offline RSA signing key, checks its public key against the Android bundle, and generates a random JWT secret. It refuses to overwrite an existing file. Import these values through Render's private environment settings; never publish them or rotate the offline signing key casually. Previously installed devices pin its public key.
+Run `node backend/scripts/prepare-render-env.js` only for a fresh deployment environment. It creates ignored `backend/.env.render`, retains the existing offline RSA signing key, checks its public key against the Android bundle, and generates a random JWT secret. It refuses to overwrite an existing file. Use Render's private environment settings; never publish the file or rotate the offline signing key casually. Previously installed devices pin its public key.
 
 ## 4. Render Free web service
 

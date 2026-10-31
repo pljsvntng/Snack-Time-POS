@@ -9,7 +9,7 @@ const remote=process.env.TEST_REMOTE_SITE;
 if(remote){
   const url=new URL(remote);if(url.protocol!=='https:'||!url.hostname.endsWith('.onrender.com'))throw Error('Remote acceptance requires the actual Render HTTPS origin.');
   const dotenv=require('../../backend/node_modules/dotenv');
-  const accounts=JSON.parse(dotenv.parse(fs.readFileSync(path.join(root,'backend/.env.cloud-credentials'))).CLOUD_ACCOUNTS_JSON);
+  const accounts=require('../../backend/utils/ownerCredentialVault').ownerAccounts();
   process.env.TEST_ADMIN_PASSWORD=accounts.find(a=>a.username==='admin').password;
   process.env.TEST_CASHIER_PASSWORD=accounts.find(a=>a.username==='juan').password;
 }
@@ -21,6 +21,8 @@ async function wait(url) {
   throw Error('Server did not start: '+url);
 }
 (async()=>{
+ if(!process.env.TEST_ADMIN_PASSWORD)process.env.TEST_ADMIN_PASSWORD=await require('../../backend/utils/hiddenPrompt').hiddenPrompt('Administrator test password (hidden): ');
+ if(!process.env.TEST_CASHIER_PASSWORD)process.env.TEST_CASHIER_PASSWORD=await require('../../backend/utils/hiddenPrompt').hiddenPrompt('Cashier test password (hidden): ');
   fs.mkdirSync(artifacts,{recursive:true});
   const backend=remote?null:spawn(process.execPath,[path.join(root,'backend/server.js')],{cwd:root,env:{...process.env,PORT:'14800',CLIENT_ORIGIN:site},stdio:'ignore',windowsHide:true});
   const vite=remote?null:spawn(process.execPath,[path.join(root,'frontend/node_modules/vite/bin/vite.js'),'--host','127.0.0.1','--port','15179','--strictPort'],{cwd:path.join(root,'frontend'),env:{...process.env,VITE_API_URL:api+'/api'},stdio:'ignore',windowsHide:true});
@@ -43,7 +45,7 @@ async function wait(url) {
     });
     await page.goto(site+'/login',{waitUntil:'domcontentloaded'});
     await page.locator('#username').fill(process.env.TEST_ADMIN_USER || 'admin');
-    await page.locator('#password').fill(process.env.TEST_ADMIN_PASSWORD || 'admin123');
+    await page.locator('#password').fill(process.env.TEST_ADMIN_PASSWORD);
     await page.getByRole('button',{name:'Log in',exact:true}).click();
     await page.waitForURL('**/dashboard');
     await page.locator('.recharts-pie-sector').first().waitFor();
@@ -83,7 +85,7 @@ async function wait(url) {
     await page.getByRole('button',{name:'Complete Order',exact:false}).click();await page.getByText('Cash Received',{exact:true}).waitFor();
     await page.getByRole('button',{name:'Cancel',exact:true}).click();console.log('PASS: customized cart, discount control and payment dialog');
     await page.getByRole('button',{name:'Log out',exact:false}).click();await page.waitForURL('**/login');
-    await page.locator('#username').fill(process.env.TEST_CASHIER_USER || 'juan');await page.locator('#password').fill(process.env.TEST_CASHIER_PASSWORD || 'cashier123');
+    await page.locator('#username').fill(process.env.TEST_CASHIER_USER || 'juan');await page.locator('#password').fill(process.env.TEST_CASHIER_PASSWORD);
     await page.getByRole('button',{name:'Log in',exact:true}).click();await page.waitForURL('**/pos');
     assert.equal(await page.locator('.cart-item').count(),0,'Cart must not leak across users');
     await page.goto(site+'/products',{waitUntil:'domcontentloaded'});await page.waitForURL('**/pos');console.log('PASS: cashier role restrictions and logout cart cleanup');
