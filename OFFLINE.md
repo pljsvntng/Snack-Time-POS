@@ -68,6 +68,8 @@ cd frontend/android
 ./gradlew.bat :app:assembleDebug --no-daemon
 ```
 
+On this Windows workspace inside OneDrive, use `npm --prefix frontend run android:debug` after `android:prepare`. It materializes the native project, assets and native plugin sources under `%LOCALAPPDATA%/SnackTimePOS/builds` before invoking Gradle, avoiding OneDrive reparse-point/file-lock failures. It does not delete or rewrite the source images. The tested debug APK is copied to ignored `database/backups/android-build-artifacts/snack-time-pos-cloud-debug.apk`, with its checksum in `build.json`. It uses the actual Render API and is for physical-device acceptance testing; synchronization and release signing are still pending.
+
 A local Android SDK was installed under the ignored `database/backups/android-sdk` build-tools folder, with its path in ignored `frontend/android/local.properties`. The native Android project and SQLCipher plugin compiled successfully into a debug APK. Android assets now use the verified actual Render API. A release signing workflow and physical Android acceptance tests remain required before production distribution. No physical Android device was used to test SQLCipher/Keystore or power cycling.
 
 ## Verification
