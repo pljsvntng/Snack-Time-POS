@@ -28,12 +28,7 @@ async function prepare() {
     const mime = require('../utils/productImages').imageType(contents,{bundledSvg:image.toLowerCase().endsWith('.svg')});
     await pool.query('INSERT INTO product_images(path,mime_type,contents) VALUES($1,$2,$3) ON CONFLICT(path) DO NOTHING',[image,mime,contents]);
   }
-  await pool.end();
 }
-prepare().then(()=>{
-  // db.js's pool was closed after validation; the web process gets a fresh pool.
-  const child=require('node:child_process').spawn(process.execPath,[path.join(__dirname,'../server.js')],{stdio:'inherit',env:process.env,windowsHide:true});
-  for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>child.kill(signal));
-  child.on('exit',code=>{process.exitCode=code??1;});
-  child.on('error',()=>{console.error('Unable to start web server.');process.exitCode=1;});
-}).catch(async e=>{console.error(e.message);await pool.end().catch(()=>{});process.exitCode=1;});
+// Keep the validated pool and HTTP listener in one process. A separate Node
+// wrapper can leave an orphan listener when terminated on Windows.
+prepare().then(()=>require('../server')).catch(async e=>{console.error(e.message);await pool.end().catch(()=>{});process.exitCode=1;});

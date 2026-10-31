@@ -13,6 +13,7 @@
     "test:offline": "node --test tests/offline.test.cjs",
     "android:prepare": "node scripts/build-android.cjs",
     "android:open": "cap open android",
+    "android:debug": "node scripts/compile-android-windows.cjs",
     "test:offline-ui": "node tests/offline-browser.cjs"
   },
   "dependencies": {

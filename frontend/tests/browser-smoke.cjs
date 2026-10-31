@@ -5,17 +5,25 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '../..');
-const api = 'http://127.0.0.1:14800';
-const site = 'http://127.0.0.1:15179';
-const artifacts = path.join(root, 'database/backups/browser-verification');
+const remote=process.env.TEST_REMOTE_SITE;
+if(remote){
+  const url=new URL(remote);if(url.protocol!=='https:'||!url.hostname.endsWith('.onrender.com'))throw Error('Remote acceptance requires the actual Render HTTPS origin.');
+  const dotenv=require('../../backend/node_modules/dotenv');
+  const accounts=JSON.parse(dotenv.parse(fs.readFileSync(path.join(root,'backend/.env.cloud-credentials'))).CLOUD_ACCOUNTS_JSON);
+  process.env.TEST_ADMIN_PASSWORD=accounts.find(a=>a.username==='admin').password;
+  process.env.TEST_CASHIER_PASSWORD=accounts.find(a=>a.username==='juan').password;
+}
+const api = remote || 'http://127.0.0.1:14800';
+const site = remote || 'http://127.0.0.1:15179';
+const artifacts = path.join(root, 'database/backups',remote?'cloud-browser-verification':'browser-verification');
 async function wait(url) {
   for(let i=0;i<120;i++){try{if((await fetch(url)).ok)return;}catch{} await new Promise(r=>setTimeout(r,250));}
   throw Error('Server did not start: '+url);
 }
 (async()=>{
   fs.mkdirSync(artifacts,{recursive:true});
-  const backend=spawn(process.execPath,[path.join(root,'backend/server.js')],{cwd:root,env:{...process.env,PORT:'14800',CLIENT_ORIGIN:site},stdio:'ignore',windowsHide:true});
-  const vite=spawn(process.execPath,[path.join(root,'frontend/node_modules/vite/bin/vite.js'),'--host','127.0.0.1','--port','15179','--strictPort'],{cwd:path.join(root,'frontend'),env:{...process.env,VITE_API_URL:api+'/api'},stdio:'ignore',windowsHide:true});
+  const backend=remote?null:spawn(process.execPath,[path.join(root,'backend/server.js')],{cwd:root,env:{...process.env,PORT:'14800',CLIENT_ORIGIN:site},stdio:'ignore',windowsHide:true});
+  const vite=remote?null:spawn(process.execPath,[path.join(root,'frontend/node_modules/vite/bin/vite.js'),'--host','127.0.0.1','--port','15179','--strictPort'],{cwd:path.join(root,'frontend'),env:{...process.env,VITE_API_URL:api+'/api'},stdio:'ignore',windowsHide:true});
   let browser;
   try{
     await Promise.all([wait(api+'/api/health'),wait(site)]);
@@ -81,5 +89,5 @@ async function wait(url) {
     await page.goto(site+'/products',{waitUntil:'domcontentloaded'});await page.waitForURL('**/pos');console.log('PASS: cashier role restrictions and logout cart cleanup');
     assert.deepEqual(errors,[]);assert.deepEqual(apiFailures,[]);
     console.log('Browser smoke passed with no JavaScript or API errors; no production writes performed.');
-  }finally{if(browser)await browser.close();backend.kill();vite.kill();}
+  }finally{if(browser)await browser.close();backend?.kill();vite?.kill();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

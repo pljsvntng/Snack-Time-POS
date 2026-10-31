@@ -1,6 +1,12 @@
 # Render Free + Neon Free deployment
 
-Status: local offline POS implemented and tested. Cloud resources have not been deployed, and automatic synchronization is not implemented yet. No production APK has been configured with an API endpoint. The existing browser POS and local PostgreSQL remain usable.
+Status: deployed on Render Free at **https://snack-time-pos.onrender.com**, using Neon Free PostgreSQL 18. The API is **https://snack-time-pos.onrender.com/api**. The Android build configuration uses this verified actual HTTPS API. Automatic synchronization is not implemented yet; local Android sales remain on-device. The original MariaDB and local PostgreSQL records were not modified.
+
+The deployed source is the `codex/offline-render-neon` branch of `pljsvntng/Snack-Time-POS`. Automatic deployment is disabled. Render service `srv-dbiv84g473hc73ao5cqg` is in **My Workspace**, region Ohio, with compute plan **free**. Neon organization plan **free** was verified. No paid database, disk, worker or service was created. Render uses its default TCP service probe; `/api/health` has been checked directly over HTTPS.
+
+Migration evidence is private under `database/backups/postgresql-2026-10-31T13-49-12-954Z/neon-validation.json`. All 445 source records and 12 orders matched before the owner-approved cloud password rotation; all 22 referenced product photos were copied and checked. Original password hashes remain in the verified backups and local databases. New passwords for the cloud copies of `admin` and `juan` are in ignored `backend/.env.cloud-credentials`; do not paste them into chat or Git. `CLOUD_ACCOUNTS_JSON` lists each username and its password.
+
+Live HTTPS browser checks cover real login, both roles, dashboard charts, catalog, inventory, users, settings, history, receipt/report print rendering, customized carts, payment dialogs and logout cleanup without writing production sales. The isolated Neon QA branch `codex-deployment-qa-20261031` exercises sales writes, all tender types, discounts, exact stock/money, user/settings edits and photo persistence; its records are not production sales. The branch is within the Free plan's included branch allowance and retains the account's default suspend behavior.
 
 Local preparation verified on October 31, 2026: 11 SQLite durability/security tests, React/API regressions, Android encryption/URL checks, offline UI restarts, online browser checks, four final phone/tablet viewports, PostgreSQL API regressions, and an Android SQLCipher debug compile passed. The fresh PostgreSQL backup contains 15 tables, 444 records, 12 orders and 22 referenced photos; a test restore matches all values and financial totals. These counts are a dated snapshot, not a reason to reject legitimate subsequent sales.
 
@@ -16,7 +22,7 @@ Authorize the CLI in your browser and select your intended workspace. Then the a
 
 Connect the Render plugin and the Neon plugin using your own accounts. GitHub access to `pljsvntng/Snack-Time-POS` is connected. Neon CLI 8.15.1 is installed; its current profile is not signed in. If using the CLI, run `neon login` yourself and finish browser sign-in. The agent must not start unattended browser authentication.
 
-Create a **Neon Free** project, PostgreSQL **18**, preferably Singapore (`aws-ap-southeast-1`) to match the Render region. Use a new empty database, e.g. `snacktime_pos`. Keep default scale-to-zero. Do not select Launch, Scale, paid storage, or a paid organization. If your account already has a project, use an empty database in that project rather than overwriting anything.
+The existing **Neon Free** project uses PostgreSQL **18** in Ohio (`aws-us-east-2`); Render is placed in Ohio to keep backend/database calls local to the region. For any future fresh migration, use a new empty database. Keep default scale-to-zero. Do not select Launch, Scale, paid storage, or a paid organization. Never overwrite an existing database.
 
 Copy the direct/unpooled and pooled connection strings from Neon's Connect dialog into ignored `backend/.env.neon`:
 
@@ -64,7 +70,7 @@ Create a Blueprint from the deployment branch, or a Web Service with these setti
 | Setting | Value |
 | --- | --- |
 | Runtime | Node |
-| Region | Singapore |
+| Region | Ohio (matching Neon) |
 | Instance plan | **Free** |
 | Root directory | Repository root |
 | Build command | `npm ci --prefix backend && npm ci --prefix frontend --include=dev && npm run build --prefix frontend` |

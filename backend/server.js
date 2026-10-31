@@ -58,6 +58,13 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Snack Time POS API listening on port ${PORT}`);
+});
+let closing=false;
+for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{
+  if(closing)return;closing=true;
+  server.close(()=>require('./config/db').end().then(()=>process.exit(0)).catch(()=>process.exit(1)));
+  // Let active checkouts finish before the host's shutdown deadline.
+  setTimeout(()=>{server.closeAllConnections();process.exit(1);},25000).unref();
 });

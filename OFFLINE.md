@@ -1,6 +1,6 @@
 # Android SQLite offline POS
 
-PostgreSQL remains the online system of record. Android has a separate encrypted SQLite database for offline cash sales. The existing browser POS remains online. No synchronization or local-sale upload is enabled in this phase; the requested Render/Neon deployment and automatic synchronization are the next phase.
+PostgreSQL on Neon remains the online system of record. The online POS is deployed at https://snack-time-pos.onrender.com on Render Free. Android has a separate encrypted SQLite database for offline cash sales and is configured with the actual HTTPS API. The existing browser POS remains online. No synchronization or local-sale upload is enabled in this phase; automatic synchronization is still the next phase.
 
 ## Implemented operations
 
@@ -48,10 +48,10 @@ This command retains an existing private key and exports its public key for Andr
 
 The Capacitor Android project is in `frontend/android`. App assets are bundled locally; no remote `server.url` is configured. Native online requests require a real HTTPS API address, with no loopback/default/placeholder URL in a production APK.
 
-The current development API is local HTTP, so it cannot be used as an Android production endpoint. The user has requested Render Free plus Neon Free. After that deployment is verified, put its actual URL in ignored `frontend/.env.android.local`:
+Render Free plus Neon Free have been deployed and verified. The ignored `frontend/.env.android.local` uses:
 
 ```text
-VITE_API_URL=<actual Render HTTPS API URL ending in /api>
+VITE_API_URL=https://snack-time-pos.onrender.com/api
 ```
 
 Then:
@@ -68,7 +68,7 @@ cd frontend/android
 ./gradlew.bat :app:assembleDebug --no-daemon
 ```
 
-A local Android SDK was installed under the ignored `database/backups/android-sdk` build-tools folder, with its path in ignored `frontend/android/local.properties`. The native Android project and SQLCipher plugin compiled successfully into a debug APK. That compile verification uses local web-build assets and is not an authorized production APK: it still needs the actual Render URL and a release signing workflow before distribution. No physical Android device was used to test SQLCipher/Keystore or power cycling.
+A local Android SDK was installed under the ignored `database/backups/android-sdk` build-tools folder, with its path in ignored `frontend/android/local.properties`. The native Android project and SQLCipher plugin compiled successfully into a debug APK. Android assets now use the verified actual Render API. A release signing workflow and physical Android acceptance tests remain required before production distribution. No physical Android device was used to test SQLCipher/Keystore or power cycling.
 
 ## Verification
 
