@@ -1,24 +1,25 @@
+import TableScroll from '../components/TableScroll';
 import { useEffect, useState } from 'react';
 import { Search, Eye, Printer, X } from 'lucide-react';
 import { api } from '../services/api';
-import { peso, formatDateTime } from '../utils/currency';
+import { peso, formatDateTime, businessDate } from '../utils/currency';
 import ReceiptView from '../components/ReceiptView';
 import { useAuth } from '../context/AuthContext';
 
 function dateRangeFor(filter) {
-  const now = new Date();
+  const now = new Date(`${businessDate()}T00:00:00Z`);
   const fmt = (d) => d.toISOString().slice(0, 10);
   if (filter === 'today') return { from: `${fmt(now)} 00:00:00`, to: `${fmt(now)} 23:59:59` };
   if (filter === 'yesterday') {
-    const y = new Date(now); y.setDate(now.getDate() - 1);
+    const y = new Date(now); y.setUTCDate(now.getUTCDate() - 1);
     return { from: `${fmt(y)} 00:00:00`, to: `${fmt(y)} 23:59:59` };
   }
   if (filter === 'week') {
-    const start = new Date(now); start.setDate(now.getDate() - 7);
+    const start = new Date(now); start.setUTCDate(now.getUTCDate() - ((now.getUTCDay() + 6) % 7));
     return { from: `${fmt(start)} 00:00:00`, to: `${fmt(now)} 23:59:59` };
   }
   if (filter === 'month') {
-    const start = new Date(now); start.setDate(now.getDate() - 30);
+    const start = new Date(now); start.setUTCDate(1);
     return { from: `${fmt(start)} 00:00:00`, to: `${fmt(now)} 23:59:59` };
   }
   return {};
@@ -26,6 +27,7 @@ function dateRangeFor(filter) {
 
 export default function Transactions() {
   const { user } = useAuth();
+  const [error, setError] = useState('');
   const [orders, setOrders] = useState([]);
   const [filter, setFilter] = useState('today');
   const [search, setSearch] = useState('');
@@ -34,7 +36,7 @@ export default function Transactions() {
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
-    setLoading(true);
+    setLoading(true); setError('');
     try {
       const range = dateRangeFor(filter);
       const params = new URLSearchParams();
@@ -47,7 +49,7 @@ export default function Transactions() {
       ]);
       setOrders(ords);
       setSettings(sett);
-    } finally {
+    } catch (err) { setError(err.message); setOrders([]); } finally {
       setLoading(false);
     }
   };
@@ -57,14 +59,15 @@ export default function Transactions() {
   const handleSearch = (e) => { e.preventDefault(); load(); };
 
   const viewOrder = async (id) => {
-    const order = await api.get(`/orders/${id}`);
-    setSelectedOrder(order);
+    try { const order = await api.get(`/orders/${id}`); setSelectedOrder(order); }
+    catch (err) { setError(err.message); }
   };
 
   return (
     <div>
       <div className="page-header"><h2>{user.role === 'admin' ? 'Transaction History' : 'My Transactions'}</h2></div>
 
+      {error && <div className="login-error" role="alert">{error}</div>}
       <form className="filter-row" onSubmit={handleSearch}>
         <select value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="today">Today</option>
@@ -81,7 +84,7 @@ export default function Transactions() {
       </form>
 
       <div className="card">
-        <div className="table-wrap">
+        <TableScroll>
           <table className="data-table">
             <thead>
               <tr><th>Order #</th><th>Date/Time</th>{user.role === 'admin' && <th>Cashier</th>}<th className="num">Total</th><th>Payment</th><th>Status</th><th></th></tr>
@@ -93,7 +96,7 @@ export default function Transactions() {
                 <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No transactions found.</td></tr>
               ) : orders.map((o) => (
                 <tr key={o.id}>
-                  <td>{o.order_number}</td>
+                  <td>{o.order_number}{o.offline && <span className="cell-sub" style={{ display: 'block' }}>Local • Not uploaded</span>}</td>
                   <td>{formatDateTime(o.created_at)}</td>
                   {user.role === 'admin' && <td>{o.cashier_name}</td>}
                   <td className="num">{peso(o.total)}</td>
@@ -104,7 +107,7 @@ export default function Transactions() {
               ))}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
       </div>
 
       {selectedOrder && (

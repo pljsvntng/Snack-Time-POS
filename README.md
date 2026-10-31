@@ -1,3 +1,9 @@
+> **Android offline POS:** see [OFFLINE.md](OFFLINE.md) for encrypted SQLite, authentication, cash checkout and restart testing. See [DEPLOYMENT.md](DEPLOYMENT.md) for Render Free / Neon Free preparation and the pending synchronization phase.
+>
+> **Phone and tablet layouts:** see [RESPONSIVE.md](RESPONSIVE.md) for breakpoints, touch behavior, screenshots and responsive test commands.
+
+> **Current database: PostgreSQL.** The application has been migrated and verified. See [MIGRATION.md](MIGRATION.md) for current startup, credentials, validation results and recovery instructions. The MariaDB setup instructions below describe the original version and must not be rerun against the migrated application.
+
 # 🍔 FOODTRIP HOUSE — Point of Sale System
 
 A complete, working small-business POS: React frontend, Node/Express backend, MySQL database.

@@ -1,3 +1,4 @@
+import TableScroll from '../components/TableScroll';
 import { useEffect, useState } from 'react';
 import { Plus, SlidersHorizontal, X } from 'lucide-react';
 import { api } from '../services/api';
@@ -71,7 +72,7 @@ export default function Inventory() {
 
       {tab === 'stock' ? (
         <div className="card">
-          <div className="table-wrap">
+          <TableScroll>
             <table className="data-table">
               <thead>
                 <tr><th>Ingredient</th><th className="num">Current Stock</th><th className="num">Min Stock</th><th>Status</th><th>Actions</th></tr>
@@ -90,11 +91,11 @@ export default function Inventory() {
                 ))}
               </tbody>
             </table>
-          </div>
+        </TableScroll>
         </div>
       ) : (
         <div className="card">
-          <div className="table-wrap">
+          <TableScroll>
             <table className="data-table">
               <thead>
                 <tr><th>Date</th><th>Ingredient</th><th>Type</th><th className="num">Qty</th><th className="num">Resulting Stock</th><th>Reason</th><th>By</th></tr>
@@ -113,7 +114,7 @@ export default function Inventory() {
                 ))}
               </tbody>
             </table>
-          </div>
+        </TableScroll>
         </div>
       )}
 
@@ -125,20 +126,20 @@ export default function Inventory() {
               <div className="modal-title">Add Ingredient</div>
               <form onSubmit={handleAddIngredient} style={{ marginTop: 16 }}>
                 <div className="form-group">
-                  <label>Name</label>
-                  <input required value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} />
+                  <label htmlFor="inventory-field-1">Name</label>
+                  <input id="inventory-field-1" required value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} />
                 </div>
                 <div className="form-group">
-                  <label>Unit</label>
-                  <input value={addForm.unit} onChange={(e) => setAddForm({ ...addForm, unit: e.target.value })} placeholder="pcs, g, ml, servings..." />
+                  <label htmlFor="inventory-field-2">Unit</label>
+                  <input id="inventory-field-2" value={addForm.unit} onChange={(e) => setAddForm({ ...addForm, unit: e.target.value })} placeholder="pcs, g, ml, servings..." />
                 </div>
                 <div className="form-group">
-                  <label>Starting Stock</label>
-                  <input type="number" min="0" value={addForm.current_stock} onChange={(e) => setAddForm({ ...addForm, current_stock: e.target.value })} />
+                  <label htmlFor="inventory-field-3">Starting Stock</label>
+                  <input id="inventory-field-3" type="number" min="0" value={addForm.current_stock} onChange={(e) => setAddForm({ ...addForm, current_stock: e.target.value })} />
                 </div>
                 <div className="form-group">
-                  <label>Minimum Stock (low stock alert)</label>
-                  <input type="number" min="0" value={addForm.min_stock} onChange={(e) => setAddForm({ ...addForm, min_stock: e.target.value })} />
+                  <label htmlFor="inventory-field-4">Minimum Stock (low stock alert)</label>
+                  <input id="inventory-field-4" type="number" min="0" value={addForm.min_stock} onChange={(e) => setAddForm({ ...addForm, min_stock: e.target.value })} />
                 </div>
                 <div className="modal-actions">
                   <button type="button" className="btn btn-outline" onClick={() => setShowAddForm(false)}>Cancel</button>
@@ -161,20 +162,20 @@ export default function Inventory() {
               </p>
               <form onSubmit={handleAdjust}>
                 <div className="form-group">
-                  <label>Action</label>
-                  <select value={adjustForm.type} onChange={(e) => setAdjustForm({ ...adjustForm, type: e.target.value })}>
+                  <label htmlFor="inventory-field-5">Action</label>
+                  <select id="inventory-field-5" value={adjustForm.type} onChange={(e) => setAdjustForm({ ...adjustForm, type: e.target.value })}>
                     <option value="add">Add stock (delivery/restock)</option>
                     <option value="deduct">Deduct stock (spoilage/waste)</option>
                     <option value="adjust">Set exact stock (physical count)</option>
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>{adjustForm.type === 'adjust' ? 'New Stock Value' : 'Quantity'}</label>
-                  <input required type="number" min="0" step="0.01" value={adjustForm.quantity} onChange={(e) => setAdjustForm({ ...adjustForm, quantity: e.target.value })} />
+                  <label htmlFor="inventory-field-6">{adjustForm.type === 'adjust' ? 'New Stock Value' : 'Quantity'}</label>
+                  <input id="inventory-field-6" required type="number" min="0" step="0.01" value={adjustForm.quantity} onChange={(e) => setAdjustForm({ ...adjustForm, quantity: e.target.value })} />
                 </div>
                 <div className="form-group">
-                  <label>Reason / Note</label>
-                  <input value={adjustForm.reason} onChange={(e) => setAdjustForm({ ...adjustForm, reason: e.target.value })} placeholder="e.g. Weekly delivery" />
+                  <label htmlFor="inventory-field-7">Reason / Note</label>
+                  <input id="inventory-field-7" value={adjustForm.reason} onChange={(e) => setAdjustForm({ ...adjustForm, reason: e.target.value })} placeholder="e.g. Weekly delivery" />
                 </div>
                 <div className="modal-actions">
                   <button type="button" className="btn btn-outline" onClick={() => setAdjustTarget(null)}>Cancel</button>

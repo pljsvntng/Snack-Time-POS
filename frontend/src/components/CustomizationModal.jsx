@@ -1,11 +1,15 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Circle, CircleDot, Square, SquareCheck, Minus, Plus, X, UtensilsCrossed } from 'lucide-react';
+import useFocusLayer from '../hooks/useFocusLayer';
+import { unitAmount } from '../utils/money';
 import { peso } from '../utils/currency';
 import { stockMessage } from '../utils/stock';
 
 // selections: { [groupId]: [optionId, ...] }
 // getAvailability / isOptionAvailable come from the cart: they know the stock levels and what is already in the order.
 export default function CustomizationModal({ product, onClose, onConfirm, initial, getAvailability, isOptionAvailable }) {
+  const dialogRef = useRef(null);
+  useFocusLayer(dialogRef, true, onClose);
   const [selections, setSelections] = useState(initial?.selections || {});
   const [quantity, setQuantity] = useState(initial?.quantity || 1);
 
@@ -36,7 +40,7 @@ export default function CustomizationModal({ product, onClose, onConfirm, initia
     return result;
   }, [selections, groups]);
 
-  const unitPrice = Number(product.price) + selectedOptionObjects.reduce((s, o) => s + Number(o.price_modifier), 0);
+  const unitPrice = unitAmount(product, selectedOptionObjects);
 
   const missingRequired = groups.some((g) => g.is_required && (!selections[g.id] || selections[g.id].length === 0));
 
@@ -56,7 +60,7 @@ export default function CustomizationModal({ product, onClose, onConfirm, initia
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+      <div ref={dialogRef} className="modal-box customization-modal" role="dialog" aria-modal="true" aria-labelledby="CustomizationModal-heading" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" aria-label="Close" onClick={onClose}><X size={18} /></button>
         <div className="modal-photo">
           {product.image
@@ -64,7 +68,7 @@ export default function CustomizationModal({ product, onClose, onConfirm, initia
             : <div className="product-photo-fallback" style={{ width: '100%', height: '100%' }}><UtensilsCrossed size={56} /></div>}
         </div>
         <div className="modal-body">
-          <div className="modal-title">{product.name}</div>
+          <div id="CustomizationModal-heading" className="modal-title">{product.name}</div>
           <div className="modal-price">{peso(unitPrice)}</div>
 
           {groups.map((group) => (
@@ -80,6 +84,8 @@ export default function CustomizationModal({ product, onClose, onConfirm, initia
                   <div
                     key={opt.id}
                     className={`option-choice ${selected ? 'selected' : ''} ${optionOut ? 'disabled' : ''}`}
+                    role={group.selection_type === 'single' ? 'radio' : 'checkbox'} aria-checked={selected} tabIndex={optionOut ? -1 : 0}
+                    onKeyDown={(event) => { if (!optionOut && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); toggleOption(group, opt); } }}
                     aria-disabled={optionOut || undefined}
                     onClick={() => !optionOut && toggleOption(group, opt)}
                   >

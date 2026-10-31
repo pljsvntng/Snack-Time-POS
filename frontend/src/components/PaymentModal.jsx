@@ -1,8 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Banknote, Smartphone, CreditCard, Check, X } from 'lucide-react';
+import useFocusLayer from '../hooks/useFocusLayer';
 import { peso } from '../utils/currency';
 
-export default function PaymentModal({ total, onClose, onConfirm, submitting }) {
+export default function PaymentModal({ total, onClose, onConfirm, submitting, cashOnly = false }) {
+  const dialogRef = useRef(null);
+  useFocusLayer(dialogRef, true, () => { if (!submitting) onClose(); });
   const [method, setMethod] = useState('cash');
   const [cashReceived, setCashReceived] = useState('');
   const [error, setError] = useState('');
@@ -17,7 +20,7 @@ export default function PaymentModal({ total, onClose, onConfirm, submitting }) 
   const handleConfirm = () => {
     setError('');
     if (method === 'cash') {
-      if (cashReceived === '' || Number(cashReceived) < total) {
+      if (cashReceived === '' || !Number.isFinite(Number(cashReceived)) || Number(cashReceived) < total) {
         setError('Insufficient payment.');
         return;
       }
@@ -30,17 +33,18 @@ export default function PaymentModal({ total, onClose, onConfirm, submitting }) 
     .slice(0, 4);
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" aria-label="Close" onClick={onClose}><X size={18} /></button>
+    <div className="modal-overlay" onClick={() => { if (!submitting) onClose(); }}>
+      <div ref={dialogRef} className="modal-box payment-modal" role="dialog" aria-modal="true" aria-labelledby="PaymentModal-heading" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" aria-label="Close" disabled={submitting} onClick={onClose}><X size={18} /></button>
         <div className="modal-body">
-          <div className="modal-title">Payment</div>
+          <div id="PaymentModal-heading" className="modal-title">Payment</div>
           <div className="modal-price">Total: {peso(total)}</div>
 
+          {cashOnly && <p className="payment-note">Cash only. This sale will be saved on this device and will not be uploaded.</p>}
           {error && <div className="login-error" style={{ marginBottom: 14 }}>{error}</div>}
 
           <div className="payment-methods">
-            {['cash', 'gcash', 'other'].map((m) => (
+            {(cashOnly ? ['cash'] : ['cash', 'gcash', 'other']).map((m) => (
               <button key={m} className={`payment-method-btn ${method === m ? 'active' : ''}`} onClick={() => setMethod(m)}>
                 {m === 'cash' ? <Banknote size={22} /> : m === 'gcash' ? <Smartphone size={22} /> : <CreditCard size={22} />}
                 {m === 'cash' ? 'Cash' : m === 'gcash' ? 'GCash' : 'Other'}
@@ -51,9 +55,10 @@ export default function PaymentModal({ total, onClose, onConfirm, submitting }) 
           {method === 'cash' ? (
             <>
               <div className="form-group">
-                <label>Cash Received</label>
+                <label htmlFor="cash-received">Cash Received</label>
                 <input
-                  type="number"
+                  id="cash-received"
+                  type="number" min="0" step="0.01"
                   inputMode="decimal"
                   value={cashReceived}
                   onChange={(e) => setCashReceived(e.target.value)}
@@ -82,8 +87,8 @@ export default function PaymentModal({ total, onClose, onConfirm, submitting }) 
             </div>
           )}
 
-          <div className="modal-actions" style={{ marginTop: 16 }}>
-            <button className="btn btn-outline" onClick={onClose}>Cancel</button>
+          <div className="modal-actions sticky" style={{ marginTop: 16 }}>
+            <button className="btn btn-outline" disabled={submitting} onClick={onClose}>Cancel</button>
             <button className="btn btn-success btn-block" onClick={handleConfirm} disabled={submitting}>
               {submitting ? 'Processing...' : <><Check size={18} /> Confirm Payment</>}
             </button>

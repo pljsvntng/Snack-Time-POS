@@ -11,13 +11,14 @@ const FEATURES = [
 ];
 
 export default function Login() {
-  const { user, login, loading } = useAuth();
+  const { user, login, loading, initializing, android, offline, offlineStatus, switchMode, error: sessionError } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
+  if (initializing) return <div className="empty-state">Opening secure local storage...</div>;
   if (user) return <Navigate to={user.role === 'admin' ? '/dashboard' : '/pos'} replace />;
 
   const handleSubmit = async (e) => {
@@ -88,8 +89,16 @@ export default function Login() {
 
         <div className="login-form-inner">
           <h1 className="login-form-heading">Welcome back</h1>
-          <p className="login-form-sub">Sign in to open the register.</p>
+          <p className="login-form-sub">{offline ? 'Sign in to the cash POS saved on this device.' : 'Sign in to open the register.'}</p>
 
+          {android && <div className="offline-access">
+            <div className="mode-picker" aria-label="POS connection mode">
+              <button type="button" className={`btn ${!offline ? 'btn-primary' : 'btn-outline'}`} disabled={loading} onClick={() => switchMode(false)}>Online POS</button>
+              <button type="button" className={`btn ${offline ? 'btn-primary' : 'btn-outline'}`} disabled={loading || !offlineStatus?.preparedAt} onClick={() => switchMode(true)}>Offline cash POS</button>
+            </div>
+            <p>{offline ? 'Use your previously authorized account. Sales stay on this device and are not uploaded.' : 'A successful online sign-in prepares encrypted offline access on this Android device for seven days.'}</p>
+            {sessionError && <div role="alert">{sessionError}</div>}
+          </div>}
           {error && (
             <div className="login-error" role="alert">
               <AlertCircle size={16} /> {error}
@@ -146,10 +155,10 @@ export default function Login() {
             </button>
           </form>
 
-          <div className="login-or" aria-hidden="true"><span>or</span></div>
+          {!import.meta.env.PROD && <><div className="login-or" aria-hidden="true"><span>or</span></div>
           <p className="login-hint">
             Demo accounts — Admin: admin / admin123 · Cashier: juan / cashier123
-          </p>
+          </p></>}
         </div>
 
         <svg className="login-blob" viewBox="0 0 280 280" aria-hidden="true">

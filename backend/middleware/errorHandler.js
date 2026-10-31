@@ -7,16 +7,21 @@ function errorHandler(err, req, res, next) {
     return res.status(err.statusCode).json({ error: err.message });
   }
 
-  console.error('[Unhandled error]', err);
+  if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid JSON request.' });
+  if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'Image must be 5 MB or smaller.' });
+  if (['ECONNREFUSED', 'ETIMEDOUT', '3D000', '28P01', '57P01'].includes(err.code)) return res.status(503).json({ error: 'Database unavailable. Check that PostgreSQL is running and configured correctly.' });
+  if (['40P01', '55P03', '40001'].includes(err.code)) return res.status(409).json({ error: 'Stock changed during this request. Please try again.' });
+  if (['22003', '22001', '22P02', '22007', '23502', '23514'].includes(err.code)) return res.status(400).json({ error: 'A value is invalid or exceeds the allowed length or range.' });
 
-  // Common MySQL error codes get slightly friendlier messages
-  if (err.code === 'ER_DUP_ENTRY') {
+  // PostgreSQL SQLSTATE codes get slightly friendlier messages
+  if (err.code === '23505') {
     return res.status(409).json({ error: 'That record already exists.' });
   }
-  if (err.code === 'ER_NO_REFERENCED_ROW_2' || err.code === 'ER_ROW_IS_REFERENCED_2') {
+  if (err.code === '23503') {
     return res.status(409).json({ error: 'This action conflicts with related records.' });
   }
 
+  console.error('[Unhandled error]', { code: err.code, message: err.message });
   return res.status(500).json({ error: 'Something went wrong on our end. Please try again.' });
 }
 

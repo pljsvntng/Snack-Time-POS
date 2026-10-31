@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import useMediaQuery from '../hooks/useMediaQuery';
+import useFocusLayer from '../hooks/useFocusLayer';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   ShoppingCart, LayoutDashboard, Tag, Boxes, ReceiptText, BarChart3, Users as UsersIcon,
-  Settings as SettingsIcon, LogOut, Menu, User, CalendarDays,
+  Settings as SettingsIcon, LogOut, Menu, X, User, CalendarDays,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { BrandLockup } from '../components/Brand';
@@ -24,10 +26,15 @@ const CASHIER_LINKS = [
 ];
 
 export default function AppLayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, android, offline, offlineStatus, switchMode } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const drawer = useMediaQuery('(max-width: 1199px)');
+  const navigationRef = useRef(null);
+  useFocusLayer(navigationRef, drawer && menuOpen, () => setMenuOpen(false));
+  useEffect(() => { if (!drawer) setMenuOpen(false); }, [drawer]);
 
   const links = user?.role === 'admin' ? ADMIN_LINKS : CASHIER_LINKS;
   const isPos = location.pathname === '/pos';
@@ -40,11 +47,12 @@ export default function AppLayout() {
   return (
     <div className="app-shell">
       <div className={`sidebar-backdrop ${menuOpen ? 'show' : ''}`} onClick={() => setMenuOpen(false)} />
-      <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
+      <aside id="navigation-drawer" ref={navigationRef} className={`sidebar ${menuOpen ? 'open' : ''}`} inert={drawer && !menuOpen ? '' : undefined} role={drawer ? 'dialog' : undefined} aria-modal={drawer && menuOpen ? true : undefined} aria-label="Main navigation" tabIndex={-1}>
         <div className="sidebar-logo">
           <BrandLockup />
+          <button className="navigation-close" aria-label="Close menu" onClick={() => setMenuOpen(false)}><X size={20} /></button>
         </div>
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" aria-label="POS sections">
           {links.map((link) => {
             const Icon = link.icon;
             return (
@@ -75,18 +83,27 @@ export default function AppLayout() {
         </div>
       </aside>
 
-      <div className="main-content">
+      <div className="main-content" inert={drawer && menuOpen ? '' : undefined}>
         <header className="topbar">
-          <button className="mobile-menu-btn" aria-label="Open menu" onClick={() => setMenuOpen((o) => !o)}>
+          <button className="mobile-menu-btn" aria-label="Open menu" aria-expanded={menuOpen} aria-controls="navigation-drawer" onClick={() => setMenuOpen((o) => !o)}>
             <Menu size={20} />
           </button>
-          <div />
+          <span className="topbar-title">{links.find(link => link.to === location.pathname)?.label || 'Snack Time POS'}</span>
           <div className="topbar-date">
             <CalendarDays size={16} />
-            {new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            <time dateTime={new Date().toISOString()}>
+              <span className="date-full">{new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+              <span className="date-compact">{new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</span>
+            </time>
           </div>
         </header>
         <div className={`page-body ${isPos ? 'page-body-pos' : ''}`}>
+          {android && <div className="offline-status" role="status">
+            <span>{offline ? 'Offline cash POS • Sales saved on this device • Not uploaded' : 'Online POS'}{offlineStatus?.localSales ? ` • ${offlineStatus.localSales} local sale(s) retained` : ''}</span>
+            <button type="button" className="btn btn-outline btn-sm" onClick={async()=>{await switchMode(!offline);navigate('/login');}} disabled={!offline && !offlineStatus?.preparedAt}>{offline ? 'Sign in online' : 'Use offline POS'}</button>
+            {offline && <small>Local stock snapshot: {offlineStatus?.preparedAt ? new Date(offlineStatus.preparedAt).toLocaleString('en-PH') : 'unavailable'}. Other devices may have different stock.</small>}
+            {offlineStatus?.warning && <small>{offlineStatus.warning}</small>}
+          </div>}
           <Outlet />
         </div>
       </div>

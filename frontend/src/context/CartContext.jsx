@@ -1,14 +1,14 @@
-import { createContext, useContext, useState, useMemo, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { availability, optionAvailable, findStockIssues, lineIssue as findLineIssue, EMPTY_CATALOG } from '../utils/stock';
 
+import { unitAmount, lineAmount, cartAmounts } from '../utils/money';
+import { getOfflineStore } from '../offline/runtime';
+import { useAuth } from './AuthContext';
 const CartContext = createContext(null);
 
 let nextCartItemId = 1;
 
-function computeUnitPrice(product, selectedOptions) {
-  const modifierTotal = selectedOptions.reduce((sum, o) => sum + Number(o.price_modifier), 0);
-  return Number(product.price) + modifierTotal;
-}
+const computeUnitPrice = unitAmount;
 
 // Two cart lines are the same line item only when they are the same product (matched by its
 // unique id, never by name or price) AND have exactly the same selected options. Different
@@ -19,8 +19,14 @@ function lineKey(product, selectedOptions) {
 }
 
 export function CartProvider({ children }) {
+  const { user, offline } = useAuth();
+  const checkoutIdRef = useRef(crypto.randomUUID());
+  const discountRef = useRef(null);
+  const [hydratedUser, setHydratedUser] = useState(null);
+  const [persistenceError, setPersistenceError] = useState(null);
   const [items, setItemsState] = useState([]);
-  const [discount, setDiscount] = useState(null);
+  const [discount, setDiscountState] = useState(null);
+  const setDiscount = useCallback(value => { checkoutIdRef.current = crypto.randomUUID(); discountRef.current = value; setDiscountState(value); }, []);
 
   // Stock levels from the latest product list (set by the POS screen). Used only to limit what can be added.
   const [catalog, setCatalogState] = useState(EMPTY_CATALOG);
@@ -31,7 +37,7 @@ export function CartProvider({ children }) {
   // The ref always holds the newest cart, so even very fast repeated clicks are checked against
   // the true current quantities and the stock limit cannot be overshot.
   const itemsRef = useRef([]);
-  const commit = useCallback((next) => { itemsRef.current = next; setItemsState(next); }, []);
+  const commit = useCallback((next) => { checkoutIdRef.current = crypto.randomUUID(); itemsRef.current = next; setItemsState(next); }, []);
 
   // selectedOptions: [{ option_id, group_name, name, price_modifier, ingredients }]
   // Returns { requested, added, max, limiter }: `added` can be lower than `requested` when stock runs out.
@@ -46,12 +52,12 @@ export function CartProvider({ children }) {
     const existing = current.find((i) => lineKey(i.product, i.selectedOptions) === key);
     if (existing) {
       const newQty = existing.quantity + allowed;
-      commit(current.map((i) => (i === existing ? { ...i, quantity: newQty, subtotal: i.unitPrice * newQty } : i)));
+      commit(current.map((i) => (i === existing ? { ...i, quantity: newQty, subtotal: lineAmount(i.unitPrice, newQty) } : i)));
     } else {
       const unitPrice = computeUnitPrice(product, selectedOptions);
       commit([
         ...current,
-        { cartItemId: nextCartItemId++, product, selectedOptions, quantity: allowed, unitPrice, subtotal: unitPrice * allowed },
+        { cartItemId: nextCartItemId++, product, selectedOptions, quantity: allowed, unitPrice, subtotal: lineAmount(unitPrice, allowed) },
       ]);
     }
     return result;
@@ -71,7 +77,7 @@ export function CartProvider({ children }) {
       if (target > highest) { target = Math.max(item.quantity, highest); capped = true; }
     }
     if (target !== item.quantity) {
-      commit(current.map((i) => (i === item ? { ...i, quantity: target, subtotal: i.unitPrice * target } : i)));
+      commit(current.map((i) => (i === item ? { ...i, quantity: target, subtotal: lineAmount(i.unitPrice, target) } : i)));
     }
     return { quantity: target, capped };
   }, [commit]);
@@ -84,7 +90,7 @@ export function CartProvider({ children }) {
     commit(itemsRef.current.map((item) => {
       if (item.cartItemId !== cartItemId) return item;
       const unitPrice = computeUnitPrice(item.product, selectedOptions);
-      return { ...item, selectedOptions, unitPrice, subtotal: unitPrice * item.quantity };
+      return { ...item, selectedOptions, unitPrice, subtotal: lineAmount(unitPrice, item.quantity) };
     }));
   }, [commit]);
 
@@ -93,15 +99,32 @@ export function CartProvider({ children }) {
     setDiscount(null);
   }, [commit]);
 
-  const subtotal = useMemo(() => items.reduce((sum, i) => sum + i.subtotal, 0), [items]);
+  useEffect(() => {
+    let cancelled = false;
+    clearCart(); setCatalog(EMPTY_CATALOG); setHydratedUser(null); setPersistenceError(null);
+    if (offline && user) getOfflineStore().then(store => store.draft()).then(saved => {
+      if (cancelled) return;
+      if (saved) {
+        commit(saved.items); setDiscount(saved.discount || null); checkoutIdRef.current = saved.request_id;
+        nextCartItemId = Math.max(nextCartItemId, ...saved.items.map(item => item.cartItemId + 1));
+      }
+      setHydratedUser(user.id);
+    }).catch(err => { if (!cancelled) setPersistenceError(err.message); });
+    return () => { cancelled = true; };
+  }, [user?.id, offline, clearCart, setCatalog, commit, setDiscount]);
 
-  const discountAmount = useMemo(() => {
-    if (!discount) return 0;
-    const amt = discount.type === 'percent' ? subtotal * (Number(discount.value) / 100) : Number(discount.value);
-    return Math.min(amt, subtotal);
-  }, [discount, subtotal]);
+  const flushDraft = useCallback(async () => {
+    if (!offline) return;
+    if (hydratedUser !== user?.id) throw new Error('The saved cart is still opening.');
+    const store = await getOfflineStore();
+    await store.draft({ items: itemsRef.current, discount: discountRef.current, request_id: checkoutIdRef.current }, user.id);
+    setPersistenceError(null);
+  }, [offline, hydratedUser, user?.id]);
+  useEffect(() => {
+    if (offline && user && hydratedUser === user.id) flushDraft().catch(err => setPersistenceError(err.message));
+  }, [items, discount, offline, user?.id, hydratedUser, flushDraft]);
 
-  const total = useMemo(() => Math.max(0, subtotal - discountAmount), [subtotal, discountAmount]);
+  const { subtotal, discountAmount, total } = useMemo(() => cartAmounts(items, discount), [items, discount]);
 
   // ---- stock information for the screens (recomputed whenever the cart or the stock levels change) ----
   const getAvailability = useCallback(
@@ -114,6 +137,7 @@ export function CartProvider({ children }) {
 
   const value = {
     items, addItem, updateQuantity, removeItem, updateItemOptions, clearCart,
+    flushDraft, checkoutId: () => checkoutIdRef.current, persistenceError, restoringDraft: offline && hydratedUser !== user?.id,
     discount, setDiscount, subtotal, discountAmount, total,
     catalog, setCatalog, getAvailability, isOptionAvailable, stockIssues, lineIssue,
   };

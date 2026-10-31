@@ -1,19 +1,9 @@
-// Generates order numbers like FH-20260925-001, guaranteed unique by
-// counting today's orders using the same transaction connection.
+const { today } = require('./dates');
+// Caller holds the database checkout lock until commit/rollback.
 async function generateOrderNumber(connection) {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  const datePart = `${y}${m}${d}`;
-
-  const [rows] = await connection.query(
-    `SELECT COUNT(*) AS count FROM orders WHERE order_number LIKE ?`,
-    [`FH-${datePart}-%`]
-  );
-  const nextSeq = rows[0].count + 1;
-  const seqPart = String(nextSeq).padStart(3, '0');
-  return `FH-${datePart}-${seqPart}`;
+  const prefix = 'FH-' + today().replaceAll('-', '') + '-';
+  const { rows: [row] } = await connection.query(
+    'SELECT COALESCE(MAX(CAST(SUBSTRING(order_number FROM 13) AS integer)), 0) AS seq FROM orders WHERE order_number COLLATE "C" LIKE $1', [prefix + '%']);
+  return prefix + String(Number(row.seq) + 1).padStart(3, '0');
 }
-
 module.exports = { generateOrderNumber };

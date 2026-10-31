@@ -14,11 +14,11 @@ INSERT INTO roles (id, name) VALUES (1,'admin'), (2,'cashier');
 
 -- password: admin123
 INSERT INTO users (role_id, full_name, username, email, password_hash, active) VALUES
-(1, 'Admin User', 'admin', 'admin@foodtriphouse.com', '$2b$10$WlZo0v0m0f1n7Kkq7Zt8UOqYVvJq3g4l1sTfj6d8q0T1H2wJmC0Fy', 1);
+(1, 'Admin User', 'admin', 'admin@foodtriphouse.com', '$2b$10$LZ8JR3KQA7O92Lap0WkPkuFzamM88Y4vSLwJ4E14FtvyE9GxSAQli', 1);
 
 -- password: cashier123
 INSERT INTO users (role_id, full_name, username, email, password_hash, active) VALUES
-(2, 'Juan Dela Cruz', 'juan', 'juan@foodtriphouse.com', '$2b$10$m8nUeqzq0IuT2Q6dGxq6qO7fW1s0nP2xQe4d5J8yG7c1H0zN3aK9u', 1);
+(2, 'Juan Dela Cruz', 'juan', 'juan@foodtriphouse.com', '$2b$10$Y10arNv7HfPnnI/aYKNhEubagm.knR0Gqo1wzVF7.hb21yIY6cgWW', 1);
 
 -- ------------------------------------------------------------
 -- CATEGORIES

@@ -1,6 +1,9 @@
 const pool = require('../config/db');
+const { timestamp } = require('../utils/dates');
+const { number, text } = require('../utils/validation');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
+const Decimal = require('decimal.js');
 
 function ingredientStatus(row) {
   if (Number(row.current_stock) <= 0) return 'out_of_stock';
@@ -10,32 +13,36 @@ function ingredientStatus(row) {
 
 // GET /api/inventory
 const getIngredients = asyncHandler(async (req, res) => {
-  const [rows] = await pool.query(`SELECT * FROM ingredients ORDER BY name ASC`);
+  const { rows: rows } = await pool.query(`SELECT * FROM ingredients ORDER BY name ASC`);
   res.json(rows.map((r) => ({ ...r, status: ingredientStatus(r) })));
 });
 
 // POST /api/inventory (admin) -- add a new ingredient to track
 const createIngredient = asyncHandler(async (req, res) => {
   const { name, unit, current_stock, min_stock, cost_per_unit } = req.body;
-  if (!name || !name.trim()) throw new ApiError(400, 'Ingredient name is required.');
+  text(name, 'Ingredient name');
+  for (const [key, value] of Object.entries({ current_stock, min_stock, cost_per_unit })) { if (value !== undefined) number(value, key); }
 
-  const [result] = await pool.query(
-    `INSERT INTO ingredients (name, unit, current_stock, min_stock, cost_per_unit) VALUES (?, ?, ?, ?, ?)`,
+  const result = await pool.query(
+    `INSERT INTO ingredients (name, unit, current_stock, min_stock, cost_per_unit) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
     [name.trim(), unit || 'pcs', current_stock || 0, min_stock || 0, cost_per_unit || 0]
   );
-  res.status(201).json({ id: result.insertId, message: 'Ingredient added.' });
+  res.status(201).json({ id: result.rows[0].id, message: 'Ingredient added.' });
 });
 
 // PUT /api/inventory/:id (admin) -- update name/unit/min_stock/cost, not current_stock
 // (current_stock changes must go through /adjust so every change is logged)
 const updateIngredient = asyncHandler(async (req, res) => {
   const { name, unit, min_stock, cost_per_unit } = req.body;
-  const [existing] = await pool.query(`SELECT id FROM ingredients WHERE id = ?`, [req.params.id]);
+  if (name !== undefined) text(name, 'Ingredient name');
+  if (min_stock !== undefined) number(min_stock, 'Minimum stock');
+  if (cost_per_unit !== undefined) number(cost_per_unit, 'Unit cost');
+  const { rows: existing } = await pool.query(`SELECT id FROM ingredients WHERE id = $1`, [req.params.id]);
   if (!existing.length) throw new ApiError(404, 'Ingredient not found.');
 
   await pool.query(
-    `UPDATE ingredients SET name = COALESCE(?, name), unit = COALESCE(?, unit),
-     min_stock = COALESCE(?, min_stock), cost_per_unit = COALESCE(?, cost_per_unit) WHERE id = ?`,
+    `UPDATE ingredients SET name = COALESCE($1, name), unit = COALESCE($2, unit),
+     min_stock = COALESCE($3, min_stock), cost_per_unit = COALESCE($4, cost_per_unit) WHERE id = $5`,
     [name, unit, min_stock, cost_per_unit, req.params.id]
   );
   res.json({ message: 'Ingredient updated.' });
@@ -48,36 +55,38 @@ const adjustStock = asyncHandler(async (req, res) => {
   if (!ingredient_id || !['add', 'deduct', 'adjust'].includes(type) || quantity === undefined) {
     throw new ApiError(400, 'Ingredient, type, and quantity are required.');
   }
-  if (Number(quantity) < 0) throw new ApiError(400, 'Quantity cannot be negative.');
+  number(ingredient_id, 'Ingredient', { min: 1, integer: true });
+  number(quantity, 'Quantity');
+  if (new Decimal(quantity).decimalPlaces() > 2) throw new ApiError(400, 'Quantity supports at most two decimal places.');
 
-  const connection = await pool.getConnection();
+  const connection = await pool.connect();
   try {
-    await connection.beginTransaction();
+    await connection.query('BEGIN');
 
-    const [rows] = await connection.query(
-      `SELECT current_stock FROM ingredients WHERE id = ? FOR UPDATE`,
+    const { rows: rows } = await connection.query(
+      `SELECT current_stock FROM ingredients WHERE id = $1 FOR UPDATE`,
       [ingredient_id]
     );
     if (!rows.length) throw new ApiError(404, 'Ingredient not found.');
 
     let newStock;
-    if (type === 'add') newStock = Number(rows[0].current_stock) + Number(quantity);
-    else if (type === 'deduct') newStock = Number(rows[0].current_stock) - Number(quantity);
-    else newStock = Number(quantity); // 'adjust' sets the absolute value
+    if (type === 'add') newStock = new Decimal(rows[0].current_stock).plus(quantity).toFixed(2);
+    else if (type === 'deduct') newStock = new Decimal(rows[0].current_stock).minus(quantity).toFixed(2);
+    else newStock = new Decimal(quantity).toFixed(2); // 'adjust' sets the absolute value
 
-    if (newStock < 0) throw new ApiError(400, 'This would make stock negative.');
+    if (new Decimal(newStock).lt(0)) throw new ApiError(400, 'This would make stock negative.');
 
-    await connection.query(`UPDATE ingredients SET current_stock = ? WHERE id = ?`, [newStock, ingredient_id]);
+    await connection.query(`UPDATE ingredients SET current_stock = $1 WHERE id = $2`, [newStock, ingredient_id]);
     await connection.query(
       `INSERT INTO inventory_transactions (ingredient_id, type, quantity, resulting_stock, reason, user_id)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
       [ingredient_id, type, quantity, newStock, reason || '', req.user?.id || null]
     );
 
-    await connection.commit();
+    await connection.query('COMMIT');
     res.json({ message: 'Stock updated.', new_stock: newStock });
   } catch (err) {
-    await connection.rollback();
+    await connection.query('ROLLBACK');
     throw err;
   } finally {
     connection.release();
@@ -90,13 +99,13 @@ const getTransactions = asyncHandler(async (req, res) => {
   const conditions = [];
   const params = [];
 
-  if (ingredient_id) { conditions.push('t.ingredient_id = ?'); params.push(ingredient_id); }
-  if (from) { conditions.push('t.created_at >= ?'); params.push(from); }
-  if (to) { conditions.push('t.created_at <= ?'); params.push(to); }
+  if (ingredient_id) { conditions.push(`t.ingredient_id = $${params.length + 1}`); params.push(ingredient_id); }
+  if (from) { conditions.push(`t.created_at >= $${params.length + 1}`); params.push(timestamp(from)); }
+  if (to) { conditions.push(`t.created_at <= $${params.length + 1}`); params.push(timestamp(to)); }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-  const [rows] = await pool.query(
+  const { rows: rows } = await pool.query(
     `SELECT t.*, i.name AS ingredient_name, i.unit, u.full_name AS user_name
      FROM inventory_transactions t
      JOIN ingredients i ON t.ingredient_id = i.id
@@ -111,10 +120,10 @@ const getTransactions = asyncHandler(async (req, res) => {
 
 // GET /api/products/:productId/recipe -- view the Bill of Materials for a product
 const getRecipe = asyncHandler(async (req, res) => {
-  const [rows] = await pool.query(
+  const { rows: rows } = await pool.query(
     `SELECT pi.id, pi.ingredient_id, i.name, i.unit, pi.quantity_required
      FROM product_ingredients pi JOIN ingredients i ON pi.ingredient_id = i.id
-     WHERE pi.product_id = ?`,
+     WHERE pi.product_id = $1`,
     [req.params.productId]
   );
   res.json(rows);
@@ -125,22 +134,31 @@ const getRecipe = asyncHandler(async (req, res) => {
 const setRecipe = asyncHandler(async (req, res) => {
   const { items } = req.body;
   if (!Array.isArray(items)) throw new ApiError(400, 'items must be an array.');
+  const ids = new Set();
+  for (const item of items) {
+    const id = number(item?.ingredient_id, 'Ingredient', { min: 1, integer: true });
+    number(item.quantity_required, 'Recipe quantity', { min: 0.01 });
+    if (ids.has(id)) throw new ApiError(400, 'A recipe cannot repeat an ingredient.');
+    ids.add(id);
+  }
+  const { rows: [product] } = await pool.query('SELECT id FROM products WHERE id = $1 AND deleted_at IS NULL', [req.params.productId]);
+  if (!product) throw new ApiError(404, 'Product not found.');
 
-  const connection = await pool.getConnection();
+  const connection = await pool.connect();
   try {
-    await connection.beginTransaction();
-    await connection.query(`DELETE FROM product_ingredients WHERE product_id = ?`, [req.params.productId]);
+    await connection.query('BEGIN');
+    await connection.query(`DELETE FROM product_ingredients WHERE product_id = $1`, [req.params.productId]);
     for (const item of items) {
       if (!item.ingredient_id || !item.quantity_required) continue;
       await connection.query(
-        `INSERT INTO product_ingredients (product_id, ingredient_id, quantity_required) VALUES (?, ?, ?)`,
+        `INSERT INTO product_ingredients (product_id, ingredient_id, quantity_required) VALUES ($1, $2, $3) RETURNING id`,
         [req.params.productId, item.ingredient_id, item.quantity_required]
       );
     }
-    await connection.commit();
+    await connection.query('COMMIT');
     res.json({ message: 'Recipe updated.' });
   } catch (err) {
-    await connection.rollback();
+    await connection.query('ROLLBACK');
     throw err;
   } finally {
     connection.release();

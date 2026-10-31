@@ -1,24 +1,35 @@
 {
   "name": "foodtrip-house-pos-backend",
   "version": "1.0.0",
-  "description": "Foodtrip House POS - Express/MySQL backend",
+  "description": "Snack Time POS - Express/PostgreSQL backend",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "hash": "node utils/generateHash.js"
+    "start:cloud": "node scripts/cloud-start.js",
+    "backup:postgresql": "node scripts/migrate-neon.js backup",
+    "migrate:neon": "node scripts/migrate-neon.js migrate",
+    "hash": "node utils/generateHash.js",
+    "test": "node --test tests/*.test.js",
+    "backup:mariadb": "node scripts/backup-mariadb.js",
+    "migrate:postgresql": "node scripts/migrate-postgresql.js",
+    "verify:migration": "node scripts/verify-migration.js",
+    "schema:postgresql": "node scripts/generate-postgresql-schema.js",
+    "offline:keys": "node scripts/prepare-offline-keys.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
+    "decimal.js": "^10.6.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
-    "mysql2": "^3.10.0"
+    "mysql2": "^3.10.0",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"

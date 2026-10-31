@@ -1,3 +1,4 @@
+import TableScroll from '../components/TableScroll';
 import { useEffect, useState, useRef } from 'react';
 import { Plus, Pencil, ImagePlus, Eye, EyeOff, Trash2, UtensilsCrossed, X } from 'lucide-react';
 import { api, imageUrl } from '../services/api';
@@ -139,7 +140,7 @@ export default function Products() {
       <input type="file" accept="image/jpeg,image/png,image/webp" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileChange} />
 
       <div className="card">
-        <div className="table-wrap">
+        <TableScroll>
           <table className="data-table">
             <thead>
               <tr><th>Photo</th><th>Product</th><th>Category</th><th className="num">Price</th><th className="num">Stock</th><th>Status</th><th>Actions</th></tr>
@@ -173,7 +174,7 @@ export default function Products() {
               ))}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
       </div>
 
       {showForm && (
@@ -185,27 +186,27 @@ export default function Products() {
               <form onSubmit={handleSave} style={{ marginTop: 16 }}>
                 <div className="form-grid">
                   <div className="form-group form-full">
-                    <label>Product Name</label>
-                    <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                    <label htmlFor="products-field-1">Product Name</label>
+                    <input id="products-field-1" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                   </div>
                   <div className="form-group">
-                    <label>Category</label>
-                    <select required value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
+                    <label htmlFor="products-field-2">Category</label>
+                    <select id="products-field-2" required value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
                       <option value="">Select category</option>
                       {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                   <div className="form-group">
-                    <label>Price (₱)</label>
-                    <input required type="number" step="0.01" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+                    <label htmlFor="products-field-3">Price (₱)</label>
+                    <input id="products-field-3" required type="number" step="0.01" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
                   </div>
                   <div className="form-group form-full">
-                    <label>Description</label>
-                    <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+                    <label htmlFor="products-field-4">Description</label>
+                    <input id="products-field-4" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
                   </div>
                   <div className="form-group">
-                    <label>SKU</label>
-                    <input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
+                    <label htmlFor="products-field-5">SKU</label>
+                    <input id="products-field-5" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
                   </div>
                   <div className="form-group">
                     <label className="check-label">
@@ -216,12 +217,12 @@ export default function Products() {
                   {form.track_stock && (
                     <>
                       <div className="form-group">
-                        <label>Current Stock</label>
-                        <input type="number" min="0" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
+                        <label htmlFor="products-field-6">Current Stock</label>
+                        <input id="products-field-6" type="number" min="0" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
                       </div>
                       <div className="form-group">
-                        <label>Low Stock Threshold</label>
-                        <input type="number" min="0" value={form.low_stock_threshold} onChange={(e) => setForm({ ...form, low_stock_threshold: e.target.value })} />
+                        <label htmlFor="products-field-7">Low Stock Threshold</label>
+                        <input id="products-field-7" type="number" min="0" value={form.low_stock_threshold} onChange={(e) => setForm({ ...form, low_stock_threshold: e.target.value })} />
                       </div>
                     </>
                   )}

@@ -20,9 +20,9 @@ fs.mkdirSync(tempDir, { recursive: true });
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, tempDir),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
+    const ext = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' }[file.mimetype] || '.tmp';
     const base = path.basename(file.originalname, ext).replace(/[^a-z0-9-]/gi, '-').toLowerCase();
-    cb(null, `${base}-${Date.now()}${ext}`);
+    cb(null, `${base}-${require('crypto').randomUUID()}${ext}`);
   },
 });
 

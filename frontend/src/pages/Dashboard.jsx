@@ -1,3 +1,4 @@
+import TableScroll from '../components/TableScroll';
 import { useEffect, useState } from 'react';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -5,6 +6,7 @@ import {
 } from 'recharts';
 import { Banknote, ReceiptText, Package, TrendingUp, Award, AlertTriangle } from 'lucide-react';
 import { api } from '../services/api';
+import useMediaQuery from '../hooks/useMediaQuery';
 import { peso, formatDateTime } from '../utils/currency';
 
 const COLORS = ['#C2540A', '#F2A33A', '#2E7D32', '#6B4A2F', '#D9A066', '#8B8176', '#BF3B2B'];
@@ -17,6 +19,8 @@ const shortDay = (v) => {
 };
 
 export default function Dashboard() {
+  const compact = useMediaQuery('(max-width: 759px)');
+  const tooltipLayout = { position: compact ? { x: 0, y: 0 } : undefined, wrapperStyle: { maxWidth: '100%' }, contentStyle: { whiteSpace: 'normal' } };
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
@@ -84,22 +88,22 @@ export default function Dashboard() {
         <div className="card">
           <div className="section-title">Sales — Last 7 Days</div>
           <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={data.daily_sales_last_7_days}>
+            <LineChart data={data.daily_sales_last_7_days.map(row => ({ ...row, sales: Number(row.sales) }))}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
               <XAxis dataKey="day" tick={AXIS} tickFormatter={shortDay} />
               <YAxis tick={AXIS} />
-              <Tooltip formatter={(v) => peso(v)} labelFormatter={shortDay} />
+              <Tooltip {...tooltipLayout} formatter={(v) => peso(v)} labelFormatter={shortDay} />
               <Line type="monotone" dataKey="sales" stroke="#C2540A" strokeWidth={2.5} dot={{ r: 3.5 }} />
             </LineChart>
           </ResponsiveContainer>
 
           <div className="section-title" style={{ marginTop: 20 }}>Best Sellers (30 days)</div>
           <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={data.best_sellers_last_30_days} layout="vertical" margin={{ left: 40 }}>
+            <BarChart data={data.best_sellers_last_30_days.map(row => ({ ...row, qty_sold: Number(row.qty_sold) }))} layout="vertical" margin={{ left: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
               <XAxis type="number" tick={AXIS} />
               <YAxis type="category" dataKey="product_name" width={140} tick={{ ...AXIS, fontSize: 11.5 }} />
-              <Tooltip formatter={(v) => v} />
+              <Tooltip {...tooltipLayout} formatter={(v) => v} />
               <Bar dataKey="qty_sold" fill="#F2A33A" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -109,12 +113,12 @@ export default function Dashboard() {
           <div className="section-title">Sales by Category (30 days)</div>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
-              <Pie data={data.sales_by_category_last_30_days} dataKey="revenue" nameKey="category" outerRadius={80}>
+              <Pie data={data.sales_by_category_last_30_days.map(row => ({ ...row, revenue: Number(row.revenue) }))} dataKey="revenue" nameKey="category" outerRadius={80}>
                 {data.sales_by_category_last_30_days.map((entry, i) => (
                   <Cell key={i} fill={COLORS[i % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip formatter={(v) => peso(v)} />
+              <Tooltip {...tooltipLayout} formatter={(v) => peso(v)} />
               <Legend wrapperStyle={{ fontSize: 11.5 }} formatter={(v) => <span style={{ color: '#2A2623' }}>{v}</span>} />
             </PieChart>
           </ResponsiveContainer>
@@ -135,7 +139,7 @@ export default function Dashboard() {
 
       <div className="card" style={{ marginTop: 18 }}>
         <div className="section-title">Recent Transactions</div>
-        <div className="table-wrap">
+        <TableScroll>
           <table className="data-table">
             <thead>
               <tr><th>Order #</th><th>Date/Time</th><th>Cashier</th><th className="num">Total</th><th>Payment</th><th>Status</th></tr>
@@ -153,7 +157,7 @@ export default function Dashboard() {
               ))}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
       </div>
     </div>
   );

@@ -1,16 +1,4 @@
-const mysql = require('mysql2/promise');
-require('dotenv').config();
-
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 3306,
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'foodtrip_house_pos',
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  decimalNumbers: true, // return DECIMAL columns as JS numbers, not strings
-});
-
+const { Pool, options } = require('./postgresql');
+const pool = new Pool(options());
+pool.on('error', err => console.error('[PostgreSQL pool]', { code: err.code, message: err.message }));
 module.exports = pool;

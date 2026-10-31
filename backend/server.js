@@ -20,17 +20,22 @@ const settingsRoutes = require('./routes/settings');
 const app = express();
 
 app.use(helmet({ crossOriginResourcePolicy: false })); // allow serving product images cross-origin to the frontend dev server
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173' }));
+const allowedOrigins = new Set([...(process.env.CLIENT_ORIGIN || 'http://localhost:5173').split(',').map(v=>v.trim()), 'https://localhost']);
+app.use(cors({ origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)) }));
 app.use(express.json());
 app.use(morgan('dev'));
 
 // Serve uploaded product images (also served statically by the frontend's /public in dev,
 // but this makes the API self-sufficient too, e.g. if frontend is built separately)
-app.use('/images', express.static(path.join(__dirname, '..', 'frontend', 'public', 'images')));
+app.use('/images', require('./utils/productImages').serveImage, express.static(path.join(__dirname, '..', 'frontend', 'public', 'images')));
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
+app.get('/api/health', require('./utils/asyncHandler')(async (req, res) => {
+  await require('./config/db').query('SELECT 1');
+  res.json({ status: 'ok', database: 'postgresql', time: new Date().toISOString() });
+}));
 
 app.use('/api/auth', authRoutes);
+app.use('/api/offline', require('./routes/offline'));
 app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/inventory', inventoryRoutes);
@@ -40,10 +45,19 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/discounts', discountRoutes);
 app.use('/api/settings', settingsRoutes);
 
+if (process.env.SERVE_WEB === 'true') {
+  const webRoot = path.join(__dirname, '..', 'frontend', 'dist');
+  app.use(express.static(webRoot));
+  app.get('*', (req, res, next) => {
+    if (/^\/(api|images)(\/|$)/.test(req.path)) return next();
+    res.sendFile(path.join(webRoot, 'index.html'));
+  });
+}
+
 app.use(notFoundHandler);
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
-  console.log(`Foodtrip House POS API running on http://localhost:${PORT}`);
+  console.log(`Snack Time POS API listening on port ${PORT}`);
 });

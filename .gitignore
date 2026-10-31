@@ -22,3 +22,20 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+
+# Private database backups and migration connection files
+database/backups/
+backend/.env.mariadb
+backend/.env.postgresql
+
+# Offline authorization private keys and local Android configuration
+backend/keys/*.pem
+frontend/android/local.properties
+frontend/android/.gradle/
+frontend/android/**/build/
+
+
+frontend/.env*.local
+backend/.env.neon
+backend/.env.render
+backend/.env.cloud-credentials

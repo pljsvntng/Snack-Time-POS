@@ -15,7 +15,7 @@ export default function ProductCard({ product, stock, onClick, onBlocked }) {
   };
 
   return (
-    <div className={`product-card ${disabled ? 'unavailable' : ''}`} aria-disabled={disabled || undefined} onClick={handleClick}>
+    <div className={`product-card ${disabled ? 'unavailable' : ''}`} role="button" tabIndex={unavailable ? -1 : 0} aria-label={`${product.name}, ${peso(product.price)}`} aria-disabled={disabled || undefined} onClick={handleClick} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); handleClick(); } }}>
       <div className="product-photo-wrap">
         {product.image ? (
           <img src={product.image} alt={product.name} onError={(e) => { e.target.style.display = 'none'; }} loading="lazy" />

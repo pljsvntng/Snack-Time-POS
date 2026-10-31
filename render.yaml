@@ -1,0 +1,30 @@
+# One Free web service. PostgreSQL is hosted separately on Neon Free.
+services:
+  - type: web
+    name: snack-time-pos
+    runtime: node
+    plan: free
+    region: ohio
+    autoDeployTrigger: off
+    buildCommand: npm ci --prefix backend && npm ci --prefix frontend --include=dev && npm run build --prefix frontend
+    startCommand: npm run start:cloud --prefix backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 24.18.1
+      - key: NODE_ENV
+        value: production
+      - key: SERVE_WEB
+        value: "true"
+      - key: PRODUCT_IMAGE_STORAGE
+        value: postgres
+      - key: VITE_API_URL
+        value: /api
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: OFFLINE_AUTH_PRIVATE_KEY
+        sync: false
+      - key: CLIENT_ORIGIN
+        value: https://localhost

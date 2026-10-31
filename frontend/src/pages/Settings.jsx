@@ -9,7 +9,7 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get('/settings').then(setForm).finally(() => setLoading(false));
+    api.get('/settings').then(setForm).catch((err) => setToast({ type: 'error', message: err.message })).finally(() => setLoading(false));
   }, []);
 
   const handleChange = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
@@ -33,29 +33,29 @@ export default function Settings() {
       <div className="card" style={{ maxWidth: 560 }}>
         <form onSubmit={handleSave}>
           <div className="form-group">
-            <label>Business Name</label>
-            <input value={form.business_name || ''} onChange={(e) => handleChange('business_name', e.target.value)} />
+            <label htmlFor="settings-field-1">Business Name</label>
+            <input id="settings-field-1" value={form.business_name || ''} onChange={(e) => handleChange('business_name', e.target.value)} />
             <span className="hint">Printed at the top of every receipt.</span>
           </div>
           <div className="form-group">
-            <label>Address</label>
-            <input value={form.address || ''} onChange={(e) => handleChange('address', e.target.value)} />
+            <label htmlFor="settings-field-2">Address</label>
+            <input id="settings-field-2" value={form.address || ''} onChange={(e) => handleChange('address', e.target.value)} />
           </div>
           <div className="form-group">
-            <label>Contact Number</label>
-            <input value={form.contact_number || ''} onChange={(e) => handleChange('contact_number', e.target.value)} />
+            <label htmlFor="settings-field-3">Contact Number</label>
+            <input id="settings-field-3" value={form.contact_number || ''} onChange={(e) => handleChange('contact_number', e.target.value)} />
           </div>
           <div className="form-group">
-            <label>Receipt Footer</label>
-            <input value={form.receipt_footer || ''} onChange={(e) => handleChange('receipt_footer', e.target.value)} />
+            <label htmlFor="settings-field-4">Receipt Footer</label>
+            <input id="settings-field-4" value={form.receipt_footer || ''} onChange={(e) => handleChange('receipt_footer', e.target.value)} />
           </div>
           <div className="form-group">
-            <label>Currency Symbol</label>
-            <input value={form.currency_symbol || ''} onChange={(e) => handleChange('currency_symbol', e.target.value)} />
+            <label htmlFor="settings-field-5">Currency Symbol</label>
+            <input id="settings-field-5" value={form.currency_symbol || ''} onChange={(e) => handleChange('currency_symbol', e.target.value)} />
           </div>
           <div className="form-group">
-            <label>Printer Width</label>
-            <select value={form.printer_width || '58mm'} onChange={(e) => handleChange('printer_width', e.target.value)}>
+            <label htmlFor="settings-field-6">Printer Width</label>
+            <select id="settings-field-6" value={form.printer_width || '58mm'} onChange={(e) => handleChange('printer_width', e.target.value)}>
               <option value="58mm">58mm (small thermal)</option>
               <option value="80mm">80mm (standard thermal)</option>
             </select>

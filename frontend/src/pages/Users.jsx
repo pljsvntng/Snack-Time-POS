@@ -1,3 +1,4 @@
+import TableScroll from '../components/TableScroll';
 import { useEffect, useState } from 'react';
 import { Plus, Pencil, UserX, UserCheck, X } from 'lucide-react';
 import { api } from '../services/api';
@@ -57,7 +58,7 @@ export default function Users() {
       </div>
 
       <div className="card">
-        <div className="table-wrap">
+        <TableScroll>
           <table className="data-table">
             <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
             <tbody>
@@ -81,7 +82,7 @@ export default function Users() {
               ))}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
       </div>
 
       {showForm && (
@@ -92,24 +93,24 @@ export default function Users() {
               <div className="modal-title">{editingId ? 'Edit User' : 'Add User'}</div>
               <form onSubmit={handleSave} style={{ marginTop: 16 }}>
                 <div className="form-group">
-                  <label>Full Name</label>
-                  <input required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
+                  <label htmlFor="users-field-1">Full Name</label>
+                  <input id="users-field-1" required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
                 </div>
                 <div className="form-group">
-                  <label>Username</label>
-                  <input required disabled={!!editingId} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
+                  <label htmlFor="users-field-2">Username</label>
+                  <input id="users-field-2" required disabled={!!editingId} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
                 </div>
                 <div className="form-group">
-                  <label>Email</label>
-                  <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                  <label htmlFor="users-field-3">Email</label>
+                  <input id="users-field-3" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
                 </div>
                 <div className="form-group">
-                  <label>{editingId ? 'New Password (leave blank to keep current)' : 'Password'}</label>
-                  <input type="password" required={!editingId} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+                  <label htmlFor="users-field-4">{editingId ? 'New Password (leave blank to keep current)' : 'Password'}</label>
+                  <input id="users-field-4" type="password" required={!editingId} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
                 </div>
                 <div className="form-group">
-                  <label>Role</label>
-                  <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+                  <label htmlFor="users-field-5">Role</label>
+                  <select id="users-field-5" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
                     <option value="cashier">Cashier</option>
                     <option value="admin">Admin</option>
                   </select>

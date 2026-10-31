@@ -1,23 +1,25 @@
+import TableScroll from '../components/TableScroll';
 import { useEffect, useState } from 'react';
 import { Printer, Banknote, ReceiptText, Package, Tag } from 'lucide-react';
 import { api } from '../services/api';
-import { peso } from '../utils/currency';
+import { peso, businessDate } from '../utils/currency';
 
 export default function Reports() {
+  const [error, setError] = useState('');
   const [range, setRange] = useState('daily');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(businessDate());
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const load = async () => {
-    setLoading(true);
+    setLoading(true); setError('');
     try {
       let data;
       if (range === 'daily') data = await api.get(`/reports/daily?date=${date}`);
       else if (range === 'weekly') data = await api.get(`/reports/weekly?date=${date}`);
       else data = await api.get(`/reports/monthly?year=${date.slice(0, 4)}&month=${date.slice(5, 7)}`);
       setReport(data);
-    } finally {
+    } catch (err) { setError(err.message); setReport(null); } finally {
       setLoading(false);
     }
   };
@@ -27,7 +29,7 @@ export default function Reports() {
   const handlePrint = () => window.print();
 
   return (
-    <div>
+    <div className="report-print">
       <div className="page-header">
         <h2>Sales Reports</h2>
         <button className="btn btn-outline" onClick={handlePrint}><Printer size={16} /> Print / Export</button>
@@ -42,7 +44,7 @@ export default function Reports() {
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </div>
 
-      {loading || !report ? (
+      {error ? <div className="login-error" role="alert">{error}</div> : loading || !report ? (
         <div className="empty-state">Loading report...</div>
       ) : (
         <>
@@ -80,7 +82,7 @@ export default function Reports() {
           <div className="dash-grid">
             <div className="card">
               <div className="section-title">Product Sales</div>
-              <div className="table-wrap">
+              <TableScroll>
                 <table className="data-table">
                   <thead><tr><th>Product</th><th className="num">Qty Sold</th><th className="num">Revenue</th></tr></thead>
                   <tbody>
@@ -95,7 +97,7 @@ export default function Reports() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+        </TableScroll>
             </div>
 
             <div className="card">

@@ -1,4 +1,7 @@
 import { ShoppingCart, Minus, Plus, Trash2, X, UtensilsCrossed, AlertTriangle } from 'lucide-react';
+import { useRef } from 'react';
+import useMediaQuery, { CART_DRAWER_QUERY } from '../hooks/useMediaQuery';
+import useFocusLayer from '../hooks/useFocusLayer';
 import { useCart } from '../context/CartContext';
 import { peso } from '../utils/currency';
 import { issuesMessage } from '../utils/stock';
@@ -8,14 +11,17 @@ import { issuesMessage } from '../utils/stock';
 export default function CartPanel({ discounts, onCheckout, open = false, onClose }) {
   const {
     items, updateQuantity, removeItem, discount, setDiscount, subtotal, discountAmount, total,
-    getAvailability, stockIssues, lineIssue,
+    getAvailability, stockIssues, lineIssue, persistenceError, restoringDraft,
   } = useCart();
+  const drawer = useMediaQuery(CART_DRAWER_QUERY);
+  const panelRef = useRef(null);
+  useFocusLayer(panelRef, drawer && open, onClose);
   const itemCount = items.reduce((n, i) => n + i.quantity, 0);
 
   return (
-    <div className={`cart-panel ${open ? 'open' : ''}`}>
+    <div id="current-order" ref={panelRef} className={`cart-panel ${open ? 'open' : ''}`} inert={drawer && !open ? '' : undefined} role={drawer ? 'dialog' : undefined} aria-modal={drawer && open ? true : undefined} aria-labelledby="cart-heading" tabIndex={-1}>
       <div className="cart-header">
-        <h3>
+        <h3 id="cart-heading">
           Current Order
           {itemCount > 0 && <span className="cart-count">{itemCount}</span>}
         </h3>
@@ -76,8 +82,8 @@ export default function CartPanel({ discounts, onCheckout, open = false, onClose
       <div className="cart-summary">
         {discounts && discounts.length > 0 && (
           <div className="form-group" style={{ marginBottom: 10 }}>
-            <label style={{ fontSize: 12.5 }}>Discount</label>
-            <select
+            <label htmlFor="order-discount" style={{ fontSize: 12.5 }}>Discount</label>
+            <select id="order-discount"
               value={discount?.id || ''}
               onChange={(e) => setDiscount(discounts.find((d) => d.id === Number(e.target.value)) || null)}
             >
@@ -99,7 +105,8 @@ export default function CartPanel({ discounts, onCheckout, open = false, onClose
           </div>
         )}
 
-        <button className="btn btn-primary btn-block checkout-btn" disabled={items.length === 0 || stockIssues.length > 0} onClick={onCheckout}>
+        {persistenceError && <div className="cart-stock-alert" role="alert">Local cart could not be saved: {persistenceError}</div>}
+        <button className="btn btn-primary btn-block checkout-btn" disabled={items.length === 0 || stockIssues.length > 0 || Boolean(persistenceError) || restoringDraft} onClick={onCheckout}>
           Complete Order
         </button>
       </div>

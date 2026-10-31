@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { api, imageUrl } from '../services/api';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -14,7 +14,8 @@ import { peso } from '../utils/currency';
 import { buildCatalog, cardStock, stockMessage, findStockIssues, issuesMessage } from '../utils/stock';
 
 export default function POS() {
-  const { user } = useAuth();
+  const { user, offline } = useAuth();
+  const submissionRef = useRef(false);
   const cart = useCart();
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
@@ -73,7 +74,7 @@ export default function POS() {
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
       const matchesCategory = activeCategory === 'all' || p.category_slug === activeCategory;
-      const matchesSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
+      const matchesSearch = !search || [p.name, p.category_name, ...(p.option_groups || []).flatMap((g) => g.options.map((o) => o.name))].some((name) => name?.toLowerCase().includes(search.toLowerCase()));
       return matchesCategory && matchesSearch;
     });
   }, [products, activeCategory, search]);
@@ -101,6 +102,7 @@ export default function POS() {
   // Stock is checked again against the latest levels before payment is taken
   // (another cashier or an inventory change may have used it up since items were added).
   const handleCheckout = async () => {
+    try { await cart.flushDraft(); } catch (err) { warn(err.message); return; }
     const fresh = await refreshProducts();
     if (fresh) {
       const issues = findStockIssues(cart.items, buildCatalog(fresh));
@@ -113,6 +115,8 @@ export default function POS() {
   };
 
   const handleConfirmPayment = async ({ payment_method, cash_received }) => {
+    if (submissionRef.current) return;
+    submissionRef.current = true;
     setSubmitting(true);
     try {
       const payload = {
@@ -121,6 +125,8 @@ export default function POS() {
           quantity: item.quantity,
           selected_option_ids: item.selectedOptions.map((o) => o.option_id),
         })),
+        request_id: offline ? cart.checkoutId() : undefined,
+        expected_total: cart.total,
         discount_id: cart.discount?.id,
         payment_method,
         cash_received,
@@ -135,6 +141,7 @@ export default function POS() {
       setShowPayment(false);
       refreshProducts(); // stock may have changed: update the cards and cart warnings
     } finally {
+      submissionRef.current = false;
       setSubmitting(false);
     }
   };
@@ -200,7 +207,7 @@ export default function POS() {
       <div className={`cart-backdrop ${cartOpen ? 'show' : ''}`} onClick={() => setCartOpen(false)} />
       <CartPanel discounts={discounts} onCheckout={handleCheckout} open={cartOpen} onClose={() => setCartOpen(false)} />
 
-      <button className="cart-fab" onClick={() => setCartOpen(true)}>
+      <button className="cart-fab" aria-controls="current-order" aria-expanded={cartOpen} onClick={() => setCartOpen(true)}>
         <span className="fab-left">
           <ShoppingCart size={20} />
           View order
@@ -222,6 +229,7 @@ export default function POS() {
       {showPayment && (
         <PaymentModal
           total={cart.total}
+          cashOnly={offline}
           submitting={submitting}
           onClose={() => setShowPayment(false)}
           onConfirm={handleConfirmPayment}
@@ -234,7 +242,7 @@ export default function POS() {
             <div className="modal-body">
               <div className="payment-success-banner">
                 <div className="payment-success-check"><Check size={28} /></div>
-                <div className="payment-success-title">Payment Successful!</div>
+                <div className="payment-success-title">{offline ? 'Sale saved on this device' : 'Payment Successful!'}</div>
                 <div className="payment-success-order">
                   Order #{completedOrder.order_number} · Thank you for your order!
                 </div>
