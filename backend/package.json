@@ -23,7 +23,7 @@
     "offline:keys": "node scripts/prepare-offline-keys.js"
   },
   "dependencies": {
-    "bcrypt": "^5.1.1",
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "decimal.js": "^10.6.0",
     "dotenv": "^16.4.5",
@@ -35,6 +35,7 @@
     "mysql2": "^3.10.0",
     "pg": "^8.23.1"
   },
+  "overrides": { "minimatch": "^11.0.2" },
   "devDependencies": {
     "nodemon": "^3.1.0"
   }

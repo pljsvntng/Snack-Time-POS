@@ -6,6 +6,8 @@ const path = require('node:path');
 const { Pool, options } = require('../config/postgresql');
 
 test('PostgreSQL POS API regression suite', async (t) => {
+  assert.ok(!process.env.DATABASE_URL,'Regression writes require local PostgreSQL, never a cloud DATABASE_URL');
+  assert.ok(['localhost','127.0.0.1','::1'].includes(options().host),'Regression writes require a loopback PostgreSQL host');
   const offlinePair=require('crypto').generateKeyPairSync('rsa',{modulusLength:2048});
   process.env.OFFLINE_AUTH_PRIVATE_KEY=offlinePair.privateKey.export({type:'pkcs8',format:'pem'});
   const database = 'snacktime_test_' + Date.now();
@@ -200,6 +202,21 @@ test('PostgreSQL POS API regression suite', async (t) => {
         assert.equal((await request('/products/1','GET',undefined,a)).image,null);
       }finally{delete process.env.PRODUCT_IMAGE_STORAGE;}
     });
+    await t.test('online checkout retries and concurrent submissions save one sale and one stock deduction',async()=>{
+      const product=await request('/products','POST',{category_id:1,name:'Idempotency fixture',price:'5.00',track_stock:true,stock:1},a,201);
+      const payload={request_id:require('crypto').randomUUID(),items:[{product_id:product.id,quantity:1,selected_option_ids:[]}],payment_method:'cash',cash_received:'10.00',expected_total:'5.00'};
+      const before=(await admin.query('SELECT COUNT(*)::int n FROM orders')).rows[0].n;
+      const saved=await request('/orders','POST',payload,c,201);
+      const retried=await request('/orders','POST',payload,c,201);
+      assert.equal(retried.id,saved.id,'Lost checkout replies must not create another sale');
+      const concurrent=await Promise.all([request('/orders','POST',payload,c,201),request('/orders','POST',payload,c,201)]);
+      assert.ok(concurrent.every(order=>order.id===saved.id));
+      assert.equal((await admin.query('SELECT COUNT(*)::int n FROM orders')).rows[0].n,before+1);
+      assert.equal((await admin.query('SELECT stock FROM products WHERE id=$1',[product.id])).rows[0].stock,0);
+      await request('/orders','POST',{...payload,cash_received:'20.00'},c,409);
+      await request('/orders','POST',{...payload,request_id:'not-a-uuid'},c,400);
+    });
+
     await t.test('password reset invalidates issued session',async()=>{
       await request('/users/2','PUT',{password:'replacement-password'},a);
       await request('/products','GET',undefined,c,401);

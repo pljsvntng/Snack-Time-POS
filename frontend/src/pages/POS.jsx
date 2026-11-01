@@ -126,7 +126,7 @@ export default function POS() {
           quantity: item.quantity,
           selected_option_ids: item.selectedOptions.map((o) => o.option_id),
         })),
-        request_id: offline ? cart.checkoutId() : undefined,
+        request_id: cart.checkoutId(),
         expected_total: cart.total,
         discount_id: cart.discount?.id,
         payment_method,

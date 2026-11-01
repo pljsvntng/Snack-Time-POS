@@ -27,7 +27,7 @@ const CASHIER_LINKS = [
 ];
 
 export default function AppLayout() {
-  const { user, logout, android, offline, offlineStatus, switchMode } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -98,8 +98,8 @@ export default function AppLayout() {
             </time>
           </div>
         </header>
+        <SyncIndicator />
         <div className={`page-body ${isPos ? 'page-body-pos' : ''}`}>
-          <SyncIndicator />
           <Outlet />
         </div>
       </div>

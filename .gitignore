@@ -43,3 +43,7 @@ backend/.credentials.dpapi.json
 backend/.credentials.dpapi.json.pending
 *.jks
 *.keystore
+
+# Legacy database snapshot contains account hashes and historical business data.
+# Keep the original local file, but never publish it as application source.
+/copy.sql

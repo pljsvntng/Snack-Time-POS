@@ -44,7 +44,8 @@ async function snapshot(pool){const client=await pool.connect();try{await client
   assert.equal((await request('/products?search='+encodeURIComponent(suffix),'GET',undefined,admin)).length,1);
   checks.push('category/product creation, search, direct stock, fractional inventory and recipes');
   const sale=extra=>({items:[{product_id:product.id,quantity:1,selected_option_ids:[]}],payment_method:'cash',cash_received:50,...extra});
-  const cash=await request('/orders','POST',sale({items:[{product_id:product.id,quantity:2}],discount_id:1,expected_total:19.76}),cashier,201);
+  const cashPayload=sale({request_id:crypto.randomUUID(),items:[{product_id:product.id,quantity:2}],discount_id:1,expected_total:19.76});
+  const cash=await request('/orders','POST',cashPayload,cashier,201);
   assert.equal(cash.total,19.76);assert.equal(cash.discount_amount,4.94);assert.equal(cash.change_amount,30.24);
   let stock=(await qa.query('SELECT current_stock FROM ingredients WHERE id=$1',[ingredient.id])).rows[0];assert.equal(stock.current_stock,'20.00');
   assert.equal((await request('/products/'+product.id,'GET',undefined,cashier)).stock,3);
@@ -52,6 +53,9 @@ async function snapshot(pool){const client=await pool.connect();try{await client
   const other=await request('/orders','POST',sale({payment_method:'other',cash_received:undefined}),cashier,201);assert.equal(other.total,12.35);
   const race=await Promise.all([1,2].map(async()=>{const r=await fetch(base+'/api/orders',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+cashier},body:JSON.stringify(sale({}))});return r.status;}));assert.deepEqual(race.sort(),[201,400]);
   const {rows:[rollbackBefore]}=await qa.query('SELECT COUNT(*)::int count FROM orders');await request('/orders','POST',sale({}),cashier,400);const {rows:[rollbackAfter]}=await qa.query('SELECT COUNT(*)::int count FROM orders');assert.equal(rollbackAfter.count,rollbackBefore.count);
+  const retries=await Promise.all([request('/orders','POST',cashPayload,cashier,201),request('/orders','POST',cashPayload,cashier,201)]);assert.ok(retries.every(order=>order.id===cash.id));
+  await request('/orders','POST',{...cashPayload,cash_received:100},cashier,409);assert.equal((await qa.query('SELECT COUNT(*)::int count FROM orders')).rows[0].count,rollbackBefore.count);
+  checks.push('online checkout concurrent replays after stock exhaustion return the original receipt; changed requests fail without extra orders');
   stock=(await qa.query('SELECT current_stock FROM ingredients WHERE id=$1',[ingredient.id])).rows[0];assert.equal(stock.current_stock,'12.50');
   const detail=await request('/orders/'+cash.id,'GET',undefined,cashier);assert.equal(detail.items[0].product_name,'QA product '+suffix);assert.equal(detail.discount_amount,'4.94');
   checks.push('cash/GCash/other tender, percent/fixed discounts, exact change, atomic deductions, receipts, history and concurrent stock exhaustion');

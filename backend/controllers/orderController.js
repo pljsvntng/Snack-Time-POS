@@ -78,6 +78,14 @@ const createOrder = asyncHandler(async (req, res) => {
   }
 
   if (payment_method === 'cash') number(cash_received, 'Cash received');
+  const requestId=req.body.request_id;
+  if(requestId!==undefined&&(typeof requestId!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(requestId)))throw new ApiError(400,'A valid checkout identifier is required.');
+  const requestHash=requestId?require('crypto').createHash('sha256').update(JSON.stringify({
+    items:items.map(item=>({product_id:Number(item.product_id),quantity:item.quantity,selected_option_ids:Array.isArray(item.selected_option_ids)?item.selected_option_ids.map(id=>number(id,'Option',{min:1,integer:true})).sort((a,b)=>a-b):item.selected_option_ids??[]})),
+    discount_id:discount_id?number(discount_id,'Discount',{min:1,integer:true}):null,payment_method,
+    cash_received:payment_method==='cash'?new Decimal(cash_received).toFixed(2):null,
+    expected_total:req.body.expected_total===undefined?null:new Decimal(number(req.body.expected_total,'Expected total')).toFixed(2)
+  })).digest('hex'):null;
   const connection = await pool.connect();
 
   try {
@@ -85,6 +93,15 @@ const createOrder = asyncHandler(async (req, res) => {
     await connection.query("SET LOCAL lock_timeout = '10s'");
     // Transaction advisory lock releases automatically on commit, rollback, or disconnect.
     await connection.query('SELECT pg_advisory_xact_lock(731042, 1)');
+    // Replay before checking today's stock/prices: a committed sale may have
+    // consumed the last item even when its original HTTP reply was lost.
+    if(requestId){
+      const {rows:[saved]}=await connection.query('SELECT request_hash,response FROM online_checkouts WHERE user_id=$1 AND request_id=$2',[req.user.id,requestId]);
+      if(saved){
+        if(saved.request_hash!==requestHash)throw new ApiError(409,'Checkout identifier already belongs to a different sale. Review transaction history before starting another order.');
+        await connection.query('COMMIT');return res.status(201).json(saved.response);
+      }
+    }
 
     // ---- Resolve each line item: price, chosen options, snapshot data ----
     const resolvedItems = [];
@@ -260,9 +277,7 @@ const createOrder = asyncHandler(async (req, res) => {
       );
     }
 
-    await connection.query('COMMIT');
-
-    res.status(201).json({
+    const response={
       id: orderId,
       order_number: orderNumber,
       created_at: new Date().toISOString(),
@@ -273,7 +288,10 @@ const createOrder = asyncHandler(async (req, res) => {
         quantity: l.quantity, subtotal: l.subtotal,
         options: l.options.map((o) => ({ group: o.group_name, name: o.name, price_modifier: o.price_modifier })),
       })),
-    });
+    };
+    if(requestId)await connection.query('INSERT INTO online_checkouts(user_id,request_id,request_hash,order_id,response) VALUES($1,$2,$3,$4,$5)',[req.user.id,requestId,requestHash,orderId,JSON.stringify(response)]);
+    await connection.query('COMMIT');
+    res.status(201).json(response);
   } catch (err) {
     await connection.query('ROLLBACK');
     throw err;

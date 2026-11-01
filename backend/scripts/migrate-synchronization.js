@@ -3,7 +3,8 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 async function main(){
  const target=process.argv[2];if(!['local','cloud'].includes(target))throw Error('Usage: node scripts/migrate-synchronization.js local|cloud');
  const {Pool,options}=require('../config/postgresql');if(target==='cloud'){require('dotenv').config({path:path.resolve(__dirname,'../.env.neon'),override:true});process.env.DATABASE_URL=process.env.NEON_DATABASE_URL;}else delete process.env.DATABASE_URL;
- const config=options(),pool=new Pool(config),dir=path.resolve(__dirname,'../../database/backups/phase6-'+target+'-'+Date.now());fs.mkdirSync(dir,{recursive:true});
+ const phase=process.argv.includes('--phase8')?'phase8':'phase6';
+ const config=options(),pool=new Pool(config),dir=path.resolve(__dirname,'../../database/backups/'+phase+'-'+target+'-'+Date.now());fs.mkdirSync(dir,{recursive:true});
  try{
   const {fingerprint,command}=require('./migrate-neon');const before=await fingerprint(pool),file=path.join(dir,'pre-sync.dump');
   await command('pg_dump',['--format=custom','--no-owner','--no-privileges','--file='+file,config.database],config);await command('pg_restore',['--list',file],config);if(fs.statSync(file).size<1000)throw Error('Backup archive is incomplete.');
