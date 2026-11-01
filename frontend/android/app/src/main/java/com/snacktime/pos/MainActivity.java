@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(SnackTimePrintPlugin.class);
+        registerPlugin(SnackTimeStorageDiagnosticsPlugin.class);
         SplashScreen.installSplashScreen(this);
         EdgeToEdge.enable(this);
         super.onCreate(savedInstanceState);

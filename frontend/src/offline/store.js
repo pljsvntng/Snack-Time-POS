@@ -6,7 +6,10 @@ export class OfflineStore extends SyncStore {
  constructor(driver,publicKey,{now=()=>Date.now()}={}) { super();this.db=driver;this.publicKey=publicKey;this.now=now;this.session=null;this.tail=Promise.resolve(); }
  async initialize() {
   if(!this.initialized)this.initialized=(async()=>{
-   await this.db.execute('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;');
+   await this.db.execute('PRAGMA foreign_keys=ON; PRAGMA synchronous=FULL;');
+   // Android execSQL cannot consume result rows returned by these PRAGMAs.
+   await this.db.query('PRAGMA journal_mode=WAL;');
+   await this.db.query('PRAGMA busy_timeout=5000;');
    const version=(await this.db.query('PRAGMA user_version'))[0].user_version;
    if(version>2)throw offlineError('This local database needs a newer application.');
    await this.db.transaction(async()=>{await this.db.execute(schema);if(!await this.getMeta('device_id'))await this.setMeta('device_id',crypto.randomUUID());await this.backfillOutbox();});

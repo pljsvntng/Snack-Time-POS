@@ -1,5 +1,7 @@
 # Phase 7 — Snack Time POS Android APK
 
+Storage startup update: the current APK is **1.1.1 / version code 3**. See [STORAGE-RECOVERY.md](STORAGE-RECOVERY.md) for the reported physical-phone issue, patch, diagnostics and pending device confirmation. The Phase 7 results below describe the original 1.1.0 build.
+
 Verification date: **1 November 2026, Asia/Manila**. Reuses the existing React/Vite, Express, Neon PostgreSQL, encrypted SQLite and Phase 6 delivery engine. No backend schema migration, password reset, production sale, database reset or paid service was needed for this phase. Physical-device testing was deferred at the owner's request.
 
 ## Application and security configuration

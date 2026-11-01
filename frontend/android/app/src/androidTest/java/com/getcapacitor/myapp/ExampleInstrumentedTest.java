@@ -16,6 +16,11 @@ import java.util.HashSet;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.io.File;
+import java.security.SecureRandom;
+import android.database.Cursor;
+import android.util.Base64;
+import net.zetetic.database.sqlcipher.SQLiteDatabase;
 
 /**
  * Instrumented test, which will execute on an Android device.
@@ -24,6 +29,39 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @RunWith(AndroidJUnit4.class)
 public class ExampleInstrumentedTest {
+
+    @Test
+    public void emptyKeyedDatabaseNeedsAnEncryptedPageBeforeIndependentVerification() throws Exception {
+        Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File file=new File(context.getCacheDir(),"snacktime-encryption-regression-"+java.util.UUID.randomUUID()+".db");
+        byte[] random=new byte[32];new SecureRandom().nextBytes(random);
+        String key=Base64.encodeToString(random,Base64.NO_WRAP);
+        System.loadLibrary("sqlcipher");
+        SQLiteDatabase keyed=null;
+        try {
+            keyed=SQLiteDatabase.openOrCreateDatabase(file,key,null,null);
+            try(Cursor c=keyed.rawQuery("PRAGMA cipher_status",null)){assertTrue(c.moveToFirst());assertEquals(1,c.getInt(0));}
+            // Reproduce the old file-only check before any page was committed.
+            assertTrue("Empty file can pass a no-key read before its first write",canReadWithoutKey(file));
+            keyed.execSQL("CREATE TABLE _snacktime_storage_guard (id INTEGER PRIMARY KEY)");
+            keyed.close();keyed=null;
+            assertFalse("Persisted encrypted page must reject a no-key reader",canReadWithoutKey(file));
+            keyed=SQLiteDatabase.openDatabase(file.getAbsolutePath(),key,null,SQLiteDatabase.OPEN_READONLY,null);
+            try(Cursor c=keyed.rawQuery("SELECT COUNT(*) FROM _snacktime_storage_guard",null)){assertTrue(c.moveToFirst());assertEquals(0,c.getInt(0));}
+        } finally {
+            if(keyed!=null)keyed.close();
+            // Only this method's uniquely named, newly created cache fixture.
+            if(file.getParentFile().equals(context.getCacheDir())&&file.getName().startsWith("snacktime-encryption-regression-"))file.delete();
+            java.util.Arrays.fill(random,(byte)0);
+        }
+    }
+
+    private boolean canReadWithoutKey(File file){
+        SQLiteDatabase reader=null;
+        try{reader=SQLiteDatabase.openDatabase(file.getAbsolutePath(),"",null,SQLiteDatabase.OPEN_READONLY,null);reader.getVersion();return true;}
+        catch(Exception expected){return false;}
+        finally{if(reader!=null)reader.close();}
+    }
 
     @Test
     public void packagePermissionsAndLocalDataPolicy() throws Exception {
@@ -49,7 +87,7 @@ public class ExampleInstrumentedTest {
                 assertTrue("Native startup did not reach secure sign-in", System.currentTimeMillis() < deadline);
                 Thread.sleep(250);
             }
-            assertEquals("true", evaluate(scenario, "window.Capacitor.isPluginAvailable('CapacitorSQLite') && window.Capacitor.isPluginAvailable('Network') && window.Capacitor.isPluginAvailable('App')"));
+            assertEquals("true", evaluate(scenario, "window.Capacitor.isPluginAvailable('CapacitorSQLite') && window.Capacitor.isPluginAvailable('Network') && window.Capacitor.isPluginAvailable('App') && window.Capacitor.isPluginAvailable('SnackTimeStorageDiagnostics')"));
             evaluate(scenario, "window.__phase7EncryptionProbe=null; Promise.all([window.Capacitor.Plugins.CapacitorSQLite.isDatabaseEncrypted({database:'snack_time_offline'}),window.Capacitor.Plugins.CapacitorSQLite.isSecretStored()]).then(r=>{window.__phase7EncryptionProbe=r.every(v=>v.result===true);}).catch(()=>{window.__phase7EncryptionProbe=false;}); true;");
             while ("null".equals(evaluate(scenario, "window.__phase7EncryptionProbe"))) {
                 assertTrue("Native encrypted storage probe timed out", System.currentTimeMillis() < deadline);
