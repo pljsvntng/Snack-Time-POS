@@ -11,14 +11,15 @@ const FEATURES = [
 ];
 
 export default function Login() {
-  const { user, login, loading, initializing, android, offline, offlineStatus, switchMode, error: sessionError } = useAuth();
+  const { user, login, loading, initializing, android, offline, offlineStatus, switchMode, storageError, retryInitialization, error: sessionError } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
-  if (initializing) return <div className="empty-state">Opening secure local storage...</div>;
+  if (initializing) return <div className="empty-state" role="status">Opening secure local storage...</div>;
+  if (android&&storageError) return <div className="empty-state native-storage-error"><BrandLockup/><h2>Secure storage needs attention</h2><p role="alert">{storageError}</p><p>Keep the app data intact to preserve saved receipts. Do not uninstall or clear storage.</p><button className="btn btn-primary" onClick={retryInitialization}>Retry secure storage</button></div>;
   if (user) return <Navigate to={user.role === 'admin' ? '/dashboard' : '/pos'} replace />;
 
   const handleSubmit = async (e) => {

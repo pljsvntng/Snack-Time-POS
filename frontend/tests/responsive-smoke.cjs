@@ -5,10 +5,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const root=path.resolve(__dirname,'../..');
-const remote=process.env.TEST_REMOTE_SITE;
-if(remote){const url=new URL(remote);if(url.protocol!=='https:'||!url.hostname.endsWith('.onrender.com'))throw Error('Use the real Render HTTPS origin.');const accounts=require('../../backend/utils/ownerCredentialVault').ownerAccounts();process.env.TEST_ADMIN_PASSWORD=accounts.find(a=>a.username==='admin').password;process.env.TEST_CASHIER_PASSWORD=accounts.find(a=>a.username==='juan').password;}
-const site=remote||'http://127.0.0.1:15180', api=remote||'http://127.0.0.1:14801';
-const artifacts=path.join(root,'database/backups/responsive-verification');
+const remote=process.env.TEST_REMOTE_SITE,remoteApi=process.env.TEST_REMOTE_API;
+if(remote||remoteApi){const url=new URL(remote||remoteApi);if(url.protocol!=='https:'||!url.hostname.endsWith('.onrender.com'))throw Error('Use the real Render HTTPS origin.');const accounts=require('../../backend/utils/ownerCredentialVault').ownerAccounts();process.env.TEST_ADMIN_PASSWORD=accounts.find(a=>a.username==='admin').password;process.env.TEST_CASHIER_PASSWORD=accounts.find(a=>a.username==='juan').password;}
+const site=remote||'http://127.0.0.1:15180', api=remote||remoteApi||'http://127.0.0.1:14801';
+const artifacts=path.join(root,'database/backups',remoteApi?'phase7-responsive':'responsive-verification');
 const sizes=[['small-phone',320,640],['phone',360,800],['phone-large',393,852],['phone-wide',412,915],['small-tablet',600,960],['tablet-portrait',768,1024],['tablet-tall',800,1280],['tablet-landscape',1024,768],['tablet-wide',1280,800],['phone-landscape',852,393],['desktop',1440,900]];
 const routes=['dashboard','products','inventory','transactions','reports','users','settings'];
 async function wait(url){for(let i=0;i<160;i++){try{if((await fetch(url)).ok)return;}catch{}await new Promise(r=>setTimeout(r,250));}throw Error('Startup failed: '+url);}
@@ -22,15 +22,15 @@ async function reachable(locator,label){await locator.scrollIntoViewIfNeeded();a
  if(!process.env.TEST_ADMIN_PASSWORD)process.env.TEST_ADMIN_PASSWORD=await require('../../backend/utils/hiddenPrompt').hiddenPrompt('Administrator test password (hidden): ');
  if(!process.env.TEST_CASHIER_PASSWORD)process.env.TEST_CASHIER_PASSWORD=await require('../../backend/utils/hiddenPrompt').hiddenPrompt('Cashier test password (hidden): ');
  fs.mkdirSync(artifacts,{recursive:true});
- const backend=remote?null:spawn(process.execPath,[path.join(root,'backend/server.js')],{cwd:root,env:{...process.env,PORT:'14801',CLIENT_ORIGIN:site},stdio:'ignore',windowsHide:true});
+ const backend=remote||remoteApi?null:spawn(process.execPath,[path.join(root,'backend/server.js')],{cwd:root,env:{...process.env,PORT:'14801',CLIENT_ORIGIN:site},stdio:'ignore',windowsHide:true});
  const vite=remote?null:spawn(process.execPath,[path.join(root,'frontend/node_modules/vite/bin/vite.js'),'--host','127.0.0.1','--port','15180','--strictPort'],{cwd:path.join(root,'frontend'),env:{...process.env,VITE_API_URL:api+'/api'},stdio:'ignore',windowsHide:true});
  let browser;const summary=[];
  try{
   await Promise.all([wait(api+'/api/health'),wait(site)]);
   browser=await chromium.launch({headless:true,executablePath:process.env.TEST_CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe'});
-  async function context(options={}){const c=await browser.newContext(options);await c.route('https://fonts.googleapis.com/**',r=>r.abort());await c.route('https://fonts.gstatic.com/**',r=>r.abort());await c.route('**/api/**',r=>['GET','OPTIONS'].includes(r.request().method())||r.request().url().endsWith('/auth/login')?r.continue():r.abort());return c;}
-  const loginContext=await context({viewport:{width:393,height:852},isMobile:true,hasTouch:true});const login=await loginContext.newPage();
-  await login.goto(site+'/login',{waitUntil:'domcontentloaded'});await contained(login,'phone login');
+  async function context(options={}){const c=await browser.newContext(options);await c.route('https://fonts.googleapis.com/**',r=>r.abort());await c.route('https://fonts.gstatic.com/**',r=>r.abort());await c.route('**/api/**',async r=>{try{if(!['GET','OPTIONS'].includes(r.request().method())&&!r.request().url().endsWith('/auth/login'))return await r.abort();if(!remoteApi)return await r.continue();const response=await r.fetch({headers:{...r.request().headers(),origin:'https://localhost'}});return await r.fulfill({response,headers:{...response.headers(),'access-control-allow-origin':site}});}catch{try{await r.fulfill({status:503,contentType:'application/json',headers:{'access-control-allow-origin':site},body:JSON.stringify({error:'Browser acceptance proxy could not reach the API.'})});}catch{}}});return c;}
+  const loginContext=await context({viewport:{width:393,height:852},isMobile:true,hasTouch:true});const login=await loginContext.newPage();login.setDefaultTimeout(120000);
+  await login.goto(site+'/login',{waitUntil:'commit',timeout:120000});await login.locator('#username').waitFor();await contained(login,'phone login');
   await login.locator('#username').fill(process.env.TEST_ADMIN_USER||'admin');await login.locator('#password').fill(process.env.TEST_ADMIN_PASSWORD);
   await login.getByRole('button',{name:'Log in',exact:true}).click();await login.waitForURL('**/dashboard');const storageState=await loginContext.storageState();await loginContext.close();
   for(const [name,width,height] of sizes.filter(entry=>!process.env.RESPONSIVE_CASES || process.env.RESPONSIVE_CASES.split(',').includes(entry[0]))){
@@ -89,7 +89,7 @@ async function reachable(locator,label){await locator.scrollIntoViewIfNeeded();a
   }
   const cashierContext=await context({viewport:{width:393,height:852},isMobile:true,hasTouch:true});const cashier=await cashierContext.newPage();
   await cashier.goto(site+'/login',{waitUntil:'domcontentloaded'});
-  if(remote){const session=await require('../../backend/tests/live-readonly-session.cjs')();await cashier.evaluate(s=>{localStorage.setItem('fh_token',s.token);localStorage.setItem('fh_user',JSON.stringify(s.user));},session);await cashier.goto(site+'/pos',{waitUntil:'domcontentloaded'});}
+  if(remote||remoteApi){const session=await require('../../backend/tests/live-readonly-session.cjs')();await cashier.evaluate(s=>{localStorage.setItem('fh_token',s.token);localStorage.setItem('fh_user',JSON.stringify(s.user));},session);await cashier.goto(site+'/pos',{waitUntil:'domcontentloaded'});}
   else{await cashier.locator('#username').fill(process.env.TEST_CASHIER_USER||'juan');await cashier.locator('#password').fill(process.env.TEST_CASHIER_PASSWORD);await cashier.getByRole('button',{name:'Log in',exact:true}).click();await cashier.waitForURL('**/pos');}
   await cashier.getByRole('button',{name:'Open menu',exact:true}).click();const nav=cashier.locator('#navigation-drawer');await nav.waitFor({state:'visible'});
   assert.equal(await nav.locator('a').count(),2,'Cashier navigation keeps its existing role restrictions');
@@ -97,4 +97,4 @@ async function reachable(locator,label){await locator.scrollIntoViewIfNeeded();a
   await contained(cashier,'cashier transactions');await cashierContext.close();console.log('PASS mobile cashier navigation');
   fs.writeFileSync(path.join(artifacts,process.env.RESPONSIVE_CASES?'additional-results.json':'results.json'),JSON.stringify(summary,null,2));console.log('Responsive checks passed at '+summary.length+' screen sizes; no production writes.');
  }finally{if(browser)await browser.close();backend?.kill();vite?.kill();}
-})().catch(e=>{console.error(e);process.exitCode=1;});
+})().catch(e=>{console.error(require('./safe-error.cjs')(e));process.exitCode=1;});

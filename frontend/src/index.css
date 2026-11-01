@@ -818,10 +818,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--primary); outli
 @media (max-height: 559px) { .offline-status { padding: 4px 12px; } .offline-status small { display: none; } }
 @media print { .offline-status { display: none; } }
 /* Touch targets and wrapping for synchronization controls. */
-.sync-indicator { flex-wrap:wrap; max-height:35dvh; overflow-y:auto; overscroll-behavior:contain; }
+.sync-indicator { flex-wrap:wrap; max-height:35vh; max-height:35dvh; overflow-y:auto; overscroll-behavior:contain; }
 .sync-indicator small { display:block; flex-basis:100%; overflow-wrap:anywhere; }
 .sync-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .sync-actions button { min-height:44px; }
 .sync-review-row { border-top:1px solid var(--border); padding:16px 0; overflow-wrap:anywhere; }
 .sync-review-row label { display:block; margin:12px 0; }
 .sync-review-row input,.sync-review-row textarea { width:100%; max-width:480px; display:block; min-height:44px; }
+.native-navigation-error { position:fixed; top:0; left:0; right:0; z-index:1000; background:var(--warning-soft); color:var(--text); padding:12px; }
+.native-storage-error { padding:24px; max-width:600px; margin:auto; overflow-wrap:anywhere; }

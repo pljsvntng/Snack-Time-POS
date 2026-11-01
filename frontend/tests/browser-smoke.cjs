@@ -93,4 +93,4 @@ async function wait(url) {
     console.log('Browser smoke passed with no JavaScript or API errors; no production writes performed.');
     if(remote)console.log('Cashier permissions used an owner-generated read-only test session; its password was preserved, not retested.');
   }finally{if(browser)await browser.close();backend?.kill();vite?.kill();}
-})().catch(e=>{console.error(e);process.exitCode=1;});
+})().catch(e=>{console.error(require('./safe-error.cjs')(e));process.exitCode=1;});

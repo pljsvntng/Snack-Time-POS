@@ -190,3 +190,5 @@ already there and working.
 - Product images are illustrated placeholders (see note at the top).
 
 Android offline-to-online delivery, database migrations and device acceptance: [SYNCHRONIZATION.md](SYNCHRONIZATION.md).
+
+Android APK setup, build results, installation and physical-device checks: [ANDROID.md](ANDROID.md).

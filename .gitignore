@@ -41,3 +41,5 @@ backend/.env.render
 backend/.env.cloud-credentials
 backend/.credentials.dpapi.json
 backend/.credentials.dpapi.json.pending
+*.jks
+*.keystore

@@ -2,7 +2,11 @@
   "appId": "com.snacktime.pos",
   "appName": "Snack Time POS",
   "webDir": "dist",
-  "server": { "androidScheme": "https", "cleartext": false },
-  "android": { "allowMixedContent": false, "webContentsDebuggingEnabled": false, "backgroundColor": "#FBF6EE" },
-  "plugins": { "CapacitorSQLite": { "androidIsEncryption": true } }
+  "loggingBehavior": "none",
+  "server": { "androidScheme": "https", "cleartext": false, "errorPath": "webview-error.html" },
+  "android": { "allowMixedContent": false, "webContentsDebuggingEnabled": false, "minWebViewVersion": 104, "backgroundColor": "#FBF6EE" },
+  "plugins": {
+    "CapacitorSQLite": { "androidIsEncryption": true },
+    "SystemBars": { "insetsHandling": "native", "initialViewportFitValueHint": "contain", "style": "LIGHT" }
+  }
 }

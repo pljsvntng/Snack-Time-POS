@@ -1,13 +1,12 @@
 import { Capacitor } from '@capacitor/core';
-import { OfflineStore } from './store.js';
+import {createStoreLoader} from './open-store.js';
 import publicKey from './server-public-key.json';
 
 export const isAndroid = () => Capacitor.isNativePlatform() && Capacitor.getPlatform()==='android';
-let storePromise;
+const loadStore=createStoreLoader(()=>import('./android-driver.js').then(m=>m.openAndroidDatabase()),publicKey);
 export function getOfflineStore() {
  if(!isAndroid())return Promise.reject(new Error('Offline SQLite is available in the Android application.'));
- if(!storePromise)storePromise=import('./android-driver.js').then(m=>m.openAndroidDatabase()).then(async driver=>{const store=new OfflineStore(driver,publicKey);await store.initialize();return store;});
- return storePromise;
+ return loadStore();
 }
 export async function offlineMode() { return isAndroid() ? (await (await getOfflineStore()).status()).offline : false; }
 export async function setOfflineMode(value) { const store=await getOfflineStore();store.lock();await store.mode(value);window.dispatchEvent(new Event('pos:modechange')); }

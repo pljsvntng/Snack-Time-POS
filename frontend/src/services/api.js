@@ -20,6 +20,8 @@ async function request(path, { method = 'GET', body, isFormData = false } = {}) 
   try { res = await fetch(`${API_BASE}${path}`, {
     method,
     headers,
+    signal: AbortSignal.timeout(90000),
+    ...(native?{redirect:'error'}:{}),
     body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
   }); } catch { const error=new Error('Cannot reach the POS server. Check your connection or choose offline POS on the Android sign-in screen.');if(method==='POST' && path==='/orders')error.message='The online checkout response was lost. Check online transaction history before retrying or starting an offline sale.';error.network=true;throw error; }
 

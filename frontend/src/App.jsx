@@ -13,12 +13,14 @@ import Transactions from './pages/Transactions';
 import Reports from './pages/Reports';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
+import NativeNavigation from './android/NativeNavigation';
 
 export default function App() {
   return (
     <AuthProvider>
       <CartProvider>
         <BrowserRouter>
+          <NativeNavigation />
           <Routes>
             <Route path="/login" element={<Login />} />
 

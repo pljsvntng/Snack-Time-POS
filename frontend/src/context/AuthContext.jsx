@@ -8,6 +8,8 @@ export function AuthProvider({ children }) {
   const [loading,setLoading]=useState(false),[initializing,setInitializing]=useState(isAndroid());
   const [error,setError]=useState(null),[offline,setOffline]=useState(false),[offlineStatus,setOfflineStatus]=useState(null);
   const [syncStatus,setSyncStatus]=useState(null);
+  const [storageError,setStorageError]=useState(null),[initializationAttempt,setInitializationAttempt]=useState(0);
+  const retryInitialization=useCallback(()=>{setStorageError(null);setError(null);setInitializing(true);setInitializationAttempt(n=>n+1);},[]);
   const logout=useCallback(()=>{
     if(isAndroid())getOfflineStore().then(s=>{s.lock();return s.token(null);}).catch(()=>{});
     else {localStorage.removeItem('fh_token');localStorage.removeItem('fh_user');}
@@ -52,16 +54,16 @@ export function AuthProvider({ children }) {
     window.addEventListener('pos:offlineupdated',refreshLocal);
     const syncChanged=e=>setSyncStatus(e.detail);window.addEventListener('pos:syncstatus',syncChanged);
     window.addEventListener('pos:unauthorized',logout);
-    if(isAndroid())getOfflineStore().then(async store=>{const status=await store.status();setOffline(status.offline);setOfflineStatus(status);setSyncStatus(await store.syncStatus());activateSynchronization(store).catch(()=>setSyncStatus(s=>({...s,error:'Synchronization could not start. Retry or reopen the app.'})));}).catch(e=>setError(e.message)).finally(()=>setInitializing(false));
+    if(isAndroid())getOfflineStore().then(async store=>{const status=await store.status();setStorageError(null);setOffline(status.offline);setOfflineStatus(status);setSyncStatus(await store.syncStatus());activateSynchronization(store).catch(()=>setSyncStatus(s=>({...s,error:'Synchronization could not start. Retry or reopen the app.'})));}).catch(e=>{setError(e.message);setStorageError(e.message);}).finally(()=>setInitializing(false));
     else if(localStorage.getItem('fh_token'))api.get('/auth/me').then(data=>{setUser(data.user);localStorage.setItem('fh_user',JSON.stringify(data.user));}).catch(()=>{});
     return()=>{window.removeEventListener('pos:unauthorized',logout);window.removeEventListener('pos:offlineupdated',refreshLocal);window.removeEventListener('pos:syncstatus',syncChanged);};
-  },[logout]);
+  },[logout,initializationAttempt]);
   useEffect(()=>{
     if(!isAndroid())return;
     let listener,stopped=false,backgroundAt=0;
     import('@capacitor/app').then(({App})=>App.addListener('appStateChange',({isActive})=>{if(!isActive)backgroundAt=Date.now();else if(backgroundAt&&Date.now()-backgroundAt>300000)logout();})).then(value=>{if(stopped)value.remove();else listener=value;});
     return()=>{stopped=true;listener?.remove();};
   },[logout]);
-  return <AuthContext.Provider value={{user,login,logout,loading,initializing,error,offline,offlineStatus,syncStatus,switchMode,android:isAndroid()}}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{user,login,logout,loading,initializing,error,storageError,retryInitialization,offline,offlineStatus,syncStatus,switchMode,android:isAndroid()}}>{children}</AuthContext.Provider>;
 }
 export function useAuth(){const value=useContext(AuthContext);if(!value)throw new Error('useAuth must be used within AuthProvider');return value;}

@@ -14,6 +14,8 @@
     "android:prepare": "node scripts/build-android.cjs",
     "android:open": "cap open android",
     "android:debug": "node scripts/compile-android-windows.cjs",
+    "android:verify": "node scripts/compile-android-windows.cjs --verify",
+    "android:doctor": "node scripts/android-toolchain.cjs",
     "test:offline-ui": "node tests/offline-browser.cjs"
   },
   "dependencies": {
