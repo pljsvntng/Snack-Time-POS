@@ -71,6 +71,14 @@ async function wait(url){for(let i=0;i<160;i++){try{if((await fetch(url)).ok)ret
   const saved=(await store.listOrders({localOnly:true}))[0];assert.ok(saved.offline);assert.equal(saved.payment_method,'cash');console.log('PASS offline search, restored cart, discount and atomic cash checkout');
   await p.context().close();driver.close();driver=openTestDatabase(file);store=new OfflineStore(driver,publicKey);await store.initialize();
   p=await page();await login(p);assert.deepEqual(await p.locator('.mobile-bottom-nav a').allTextContents(),['POS','History'],'Offline authorization retains its cashier scope');await p.getByRole('link',{name:'History',exact:true}).click();await p.locator('.filter-row select').selectOption('all');await p.getByRole('button',{name:'View',exact:true}).first().click();await p.locator('.receipt').waitFor();assert.ok((await p.locator('.receipt').innerText()).includes(saved.order_number));assert.ok((await p.locator('.receipt').innerText()).includes('Pending synchronization'));console.log('PASS receipt and transaction history after a second SQLite/application restart');
+  // Reproduce the reported phone sequence, including a queued sale, against the
+  // actual API. This fixture disables the worker so the receipt must remain local.
+  await p.locator('.modal-close').click();online=true;
+  await p.getByRole('button',{name:'More',exact:true}).click();await p.getByRole('button',{name:'Synchronization status',exact:true}).click();
+  await p.locator('.sync-details').waitFor();await p.locator('.sync-details').getByRole('button',{name:'Sign in online',exact:true}).click();await p.waitForURL('**/login');await login(p);
+  assert.ok(p.url().endsWith('/dashboard'),'Online reauthorization restores administrator access');
+  assert.equal((await store.listOrders({localOnly:true}))[0].id,saved.id);assert.equal((await store.syncStatus()).pending,1);
+  console.log('PASS exact online → offline → online UI flow retains the pending receipt and restores administrator access');
   const {rows:[after]}=await pg.query('SELECT COUNT(*) n FROM orders');assert.equal(after.n,before.n);assert.equal((await store.listOrders({localOnly:true})).length,1);assert.deepEqual(errors,[]);console.log('Offline UI passed; no local sale was uploaded to PostgreSQL.');
  }finally{if(browser)await browser.close();await store.tail;driver.close();await new Promise(r=>bridge.close(r));backend?.kill();vite.kill();await pg.end();fs.rmSync(dir,{recursive:true,force:true});}
 })().catch(e=>{console.error(require('./safe-error.cjs')(e));process.exitCode=1;});
