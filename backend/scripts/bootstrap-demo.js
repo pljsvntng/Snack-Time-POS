@@ -28,6 +28,7 @@ const pool=new Pool(config);
   await client.query("UPDATE products SET track_stock=1,stock=100,low_stock_threshold=10 WHERE id=14");
   const {rows:identities}=await client.query("SELECT table_name,column_name FROM information_schema.columns WHERE table_schema='public' AND is_identity='YES'");
   for(const col of identities){if(!/^[a-z_]+$/.test(col.table_name)||!/^[a-z_]+$/.test(col.column_name))throw Error('Unexpected identity name');await client.query('SELECT setval(pg_get_serial_sequence($1,$2),COALESCE((SELECT MAX("'+col.column_name+'") FROM "'+col.table_name+'"),0)+1,false)',[col.table_name,col.column_name]);}
+  await client.query(fs.readFileSync(path.join(root,'database/migration_fries_drinks_flavor.postgresql.sql'),'utf8'));
   await client.query('COMMIT');
   await client.query('ALTER DATABASE "'+config.database.replaceAll('"','""')+'" SET timezone TO \'Asia/Manila\'');
   const {rows:[counts]}=await client.query('SELECT (SELECT COUNT(*) FROM products)::int products,(SELECT COUNT(*) FROM categories)::int categories,(SELECT COUNT(*) FROM ingredients)::int ingredients,(SELECT COUNT(*) FROM users)::int users,(SELECT COUNT(*) FROM orders)::int orders');
