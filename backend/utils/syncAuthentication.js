@@ -4,6 +4,7 @@ function publicKey(){return crypto.createPublicKey(process.env.OFFLINE_AUTH_PRIV
 function verifyOfflineGrant(token,{allowExpired=false}={}){
  try{
   const claims=jwt.verify(token,publicKey(),{algorithms:['RS256'],issuer:'snacktime-pos',audience:'snacktime-offline',ignoreExpiration:allowExpired});
+  require('./databaseIdentity').assertDatabaseIdentity(claims);
   if(!Number.isInteger(claims.user?.id)||claims.sub!==String(claims.user.id)||!['admin','cashier'].includes(claims.user.role)||!Array.isArray(claims.scopes)||!claims.scopes.includes('pos')||!claims.scopes.includes('own-orders')||!Number.isFinite(claims.iat)||!Number.isFinite(claims.exp)||claims.exp-claims.iat>7*86400+5||claims.iat>Date.now()/1000+300)throw Error();
   return claims;
  }catch{throw new ApiError(401,'Offline authorization expired or changed. Sign in online on this device.');}

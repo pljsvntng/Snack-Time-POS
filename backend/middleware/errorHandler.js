@@ -9,6 +9,10 @@ function errorHandler(err, req, res, next) {
 
   if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid JSON request.' });
   if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'Image must be 5 MB or smaller.' });
+  if (err.code === '53000') {
+    console.error('[Database service limit]', { code: '53000' });
+    return res.status(503).json({ code: 'DATABASE_LIMIT_REACHED', error: 'The online database has reached a hosting usage limit. Previously authorized Android users can choose offline POS. Ask the administrator to review database usage, and keep app data intact.' });
+  }
   if (['ECONNREFUSED', 'ETIMEDOUT', '3D000', '28P01', '57P01'].includes(err.code)) return res.status(503).json({ error: 'Database unavailable. Check that PostgreSQL is running and configured correctly.' });
   if (['40P01', '55P03', '40001'].includes(err.code)) return res.status(409).json({ error: 'Stock changed during this request. Please try again.' });
   if (['22003', '22001', '22P02', '22007', '23502', '23514'].includes(err.code)) return res.status(400).json({ error: 'A value is invalid or exceeds the allowed length or range.' });

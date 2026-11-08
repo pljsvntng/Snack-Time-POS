@@ -38,6 +38,9 @@ frontend/android/**/build/
 frontend/.env*.local
 backend/.env.neon
 backend/.env.render
+backend/.env.demo
+backend/.credentials.demo.dpapi.json
+backend/.credentials.demo.dpapi.json.pending
 backend/.env.cloud-credentials
 backend/.credentials.dpapi.json
 backend/.credentials.dpapi.json.pending

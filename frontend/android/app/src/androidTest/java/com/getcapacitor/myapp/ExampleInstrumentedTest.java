@@ -88,7 +88,7 @@ public class ExampleInstrumentedTest {
                 Thread.sleep(250);
             }
             assertEquals("true", evaluate(scenario, "window.Capacitor.isPluginAvailable('CapacitorSQLite') && window.Capacitor.isPluginAvailable('Network') && window.Capacitor.isPluginAvailable('App') && window.Capacitor.isPluginAvailable('SnackTimeStorageDiagnostics')"));
-            evaluate(scenario, "window.__phase7EncryptionProbe=null; Promise.all([window.Capacitor.Plugins.CapacitorSQLite.isDatabaseEncrypted({database:'snack_time_offline'}),window.Capacitor.Plugins.CapacitorSQLite.isSecretStored()]).then(r=>{window.__phase7EncryptionProbe=r.every(v=>v.result===true);}).catch(()=>{window.__phase7EncryptionProbe=false;}); true;");
+            evaluate(scenario, "window.__phase7EncryptionProbe=null; window.Capacitor.Plugins.SnackTimeStorageDiagnostics.inspectState().then(s=>Promise.all([window.Capacitor.Plugins.CapacitorSQLite.isDatabaseEncrypted({database:s.database}),window.Capacitor.Plugins.CapacitorSQLite.isSecretStored()])).then(r=>{window.__phase7EncryptionProbe=r.every(v=>v.result===true);}).catch(()=>{window.__phase7EncryptionProbe=false;}); true;");
             while ("null".equals(evaluate(scenario, "window.__phase7EncryptionProbe"))) {
                 assertTrue("Native encrypted storage probe timed out", System.currentTimeMillis() < deadline);
                 Thread.sleep(250);

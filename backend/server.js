@@ -32,7 +32,7 @@ app.use('/images', require('./utils/productImages').serveImage, express.static(p
 
 app.get('/api/health', require('./utils/asyncHandler')(async (req, res) => {
   await require('./config/db').query('SELECT 1');
-  res.json({ status: 'ok', database: 'postgresql', time: new Date().toISOString() });
+  res.json({ status: 'ok', database: 'postgresql', database_id:require('./utils/databaseIdentity').databaseIdentity(), time: new Date().toISOString() });
 }));
 
 app.use('/api/auth', authRoutes);

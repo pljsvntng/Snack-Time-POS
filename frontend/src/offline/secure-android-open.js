@@ -1,6 +1,5 @@
 import {bytes64,offlineError} from './security.js';
 
-const DATABASE='snack_time_offline';
 const messages={
  CONFIG_DISABLED:'Native database encryption is not enabled.',
  MISSING_KEY:'The existing database encryption key is unavailable. Keep app data intact; do not clear storage.',
@@ -10,9 +9,11 @@ const messages={
  MALFORMED_RESULT:'The native storage plugin returned an unexpected result.'
 };
 // No application rows, user_version changes, key changes or destructive recovery.
-export async function openSecureAndroidConnection(sqlite,diagnostics){
+export async function openSecureAndroidConnection(sqlite,diagnostics,{database:DATABASE='snack_time_offline'}={}){
+ if(!/^snack_time_offline(?:_demo_[a-z0-9_]{1,40})?$/.test(DATABASE))throw offlineError('Invalid secure database profile. Existing app data was retained.');
+ const profile=DATABASE==='snack_time_offline'?{}:{database:DATABASE};
  let db,stage='configuration',code='NATIVE_FAILURE';
- const record=async(value)=>{try{await diagnostics.record({stage,code:value});}catch{}};
+ const record=async(value)=>{try{await diagnostics.record({stage,code:value,...profile});}catch{}};
  const stop=value=>{code=value;throw Error('storage check failed');};
  const keyed=async()=>{
   const result=await db.query('PRAGMA cipher_status;');
@@ -27,9 +28,9 @@ export async function openSecureAndroidConnection(sqlite,diagnostics){
   if(typeof exists!=='boolean'||typeof hasSecret!=='boolean')stop('MALFORMED_RESULT');
   if(!hasSecret){
    // Inspect artifacts before generating a first-install key, including an orphan WAL.
-   const state=await diagnostics.inspectState();
+   const state=await diagnostics.inspectState(profile);
    if(typeof state?.databasePresent!=='boolean'||typeof state?.walPresent!=='boolean'||typeof state?.journalPresent!=='boolean')stop('MALFORMED_RESULT');
-   if(exists||state.databasePresent||state.walPresent||state.journalPresent)stop('MISSING_KEY');
+   if(exists||state.databasePresent||state.walPresent||state.journalPresent||state.anyDatabaseArtifacts)stop('MISSING_KEY');
    await sqlite.setEncryptionSecret(bytes64(crypto.getRandomValues(new Uint8Array(32))));
    if((await sqlite.isSecretStored()).result!==true)stop('MISSING_KEY');
   }

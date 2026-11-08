@@ -5,6 +5,12 @@ test('Android back dismisses frontmost modal, preserves an in-flight checkout an
 test('Android back saves the offline draft before minimizing and refuses to close on a failed save',async()=>{
  const {handleAndroidBack}=await import('../src/android/back.js'),calls=[],doc={querySelectorAll:()=>[],querySelector:()=>null,activeElement:null};const options={doc,path:'/pos',home:'/pos',index:1,navigate:()=>calls.push('navigate'),minimize:async()=>calls.push('minimize'),saveDraft:async()=>calls.push('save')};await handleAndroidBack(options);assert.deepEqual(calls,['save','minimize']);calls.length=0;await assert.rejects(handleAndroidBack({...options,saveDraft:async()=>{throw Error('SQLite busy');}}),/SQLite busy/);assert.deepEqual(calls,[]);await handleAndroidBack({...options,path:'/products',index:1});assert.deepEqual(calls,['save','navigate']);
 });
+test('Android back closes More before route navigation or minimizing',async()=>{
+ const {handleAndroidBack}=await import('../src/android/back.js'),calls=[];
+ const doc={querySelectorAll:()=>[],querySelector:selector=>selector.includes('mobile-more-sheet')?{getClientRects:()=>[{}],click:()=>calls.push('close More')}:null};
+ await handleAndroidBack({doc,path:'/reports',home:'/dashboard',index:3,navigate:()=>calls.push('navigate'),minimize:()=>calls.push('minimize'),saveDraft:()=>calls.push('save')});
+ assert.deepEqual(calls,['close More']);
+});
 test('failed secure-storage initialization closes its handle and retries without resetting persisted data',async()=>{
  const {createStoreLoader}=await import('../src/offline/open-store.js'),{openTestDatabase}=await import('./offline/node-driver.mjs');const dir=fs.mkdtempSync(path.join(os.tmpdir(),'snacktime-startup-')),file=path.join(dir,'pos.sqlite');let driver,fail=true,closed=0,opened=0;
  const load=createStoreLoader(async()=>{opened++;const native=openTestDatabase(file);driver=native;const execute=native.execute;native.execute=async sql=>{if(fail)throw Error('Temporary storage failure');return execute(sql);};const close=native.close;native.close=()=>{closed++;close();};return native;},{});

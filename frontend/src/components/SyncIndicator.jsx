@@ -1,4 +1,4 @@
-import {useEffect,useId,useState} from 'react';
+import {useEffect,useId,useState,useRef} from 'react';
 import {AlertTriangle,ChevronDown,RefreshCw} from 'lucide-react';
 import {useAuth} from '../context/AuthContext';
 import {useNavigate} from 'react-router-dom';
@@ -6,9 +6,16 @@ import {useNavigate} from 'react-router-dom';
 // These warnings stay visible outside the disclosure until explicitly acknowledged.
 const storageWarning=message=>/sqlite|local storage|database|encrypt|corrupt|data loss|keep.*data.*intact|(?:cannot|could not|failed to).*(?:save|persist|commit)|(?:save|persist|commit).*fail/i.test(message||'');
 const stamp=value=>value?new Date(value).toLocaleString('en-PH'):'Unavailable';
-export default function SyncIndicator(){
+export default function SyncIndicator({revealRequest=0}){
  const {android,offline,offlineStatus,syncStatus:s,switchMode}=useAuth(),navigate=useNavigate();
  const [expanded,setExpanded]=useState(false),[lastError,setLastError]=useState(''),[retainedWarnings,setRetainedWarnings]=useState([]),detailsId=useId();
+ const summaryRef=useRef(null);
+ useEffect(()=>{
+  if(!revealRequest)return;
+  setExpanded(true);
+  const frame=requestAnimationFrame(()=>summaryRef.current?.focus({preventScroll:true}));
+  return()=>cancelAnimationFrame(frame);
+ },[revealRequest]);
  const error=s?.error||s?.catalogError||'',catalogError=s?.catalogError||'',warning=offlineStatus?.warning||'';
  const activeWarnings=[...new Set([error,catalogError,warning].filter(storageWarning))];
  useEffect(()=>{if(error)setLastError(error);},[error]);
@@ -22,7 +29,7 @@ export default function SyncIndicator(){
  const signIn=async mode=>{await switchMode(mode);navigate('/login');};
  return <section className={`sync-indicator ${expanded?'is-expanded':''}`} aria-label="Synchronization status">
   <div className="sync-status-bar">
-   <button className="sync-summary" type="button" aria-expanded={expanded} aria-controls={detailsId} onClick={toggle} aria-label={`${label}, ${queue}${busy?', synchronizing':''}${attention?', synchronization needs attention':''}. ${expanded?'Hide':'Show'} synchronization details`}>
+   <button ref={summaryRef} className="sync-summary" type="button" aria-expanded={expanded} aria-controls={detailsId} onClick={toggle} aria-label={`${label}, ${queue}${busy?', synchronizing':''}${attention?', synchronization needs attention':''}. ${expanded?'Hide':'Show'} synchronization details`}>
     <span className={`sync-dot ${online?'is-online':'is-offline'}`} aria-hidden="true"/>
     <span role="status" aria-live="polite" className="sync-summary-text"><b>{label}</b><span aria-hidden="true"> · </span><span>{queue}</span>{busy&&<span className="sr-only"> · Synchronizing</span>}</span>
     <span className="sync-register-label">{offline?'Offline cash register':'Online register'}</span>

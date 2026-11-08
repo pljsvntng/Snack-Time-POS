@@ -2,6 +2,10 @@ const fs = require('node:fs/promises');
 const pool = require('../config/db');
 const ApiError = require('./ApiError');
 const asyncHandler = require('./asyncHandler');
+const imageReader = require('./productImageReader').createImageReader({
+  query: (sql, values) => pool.query(sql, values),
+  root: require('node:path').join(__dirname, '../../frontend/public/images'),
+});
 
 function imageType(data, {bundledSvg=false}={}) {
   if (data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) return 'image/png';
@@ -25,6 +29,8 @@ async function saveImage(productId, relativePath, upload) {
       await client.query('UPDATE products SET image=$1 WHERE id=$2',[relativePath,productId]);
       if (product.image) await client.query('DELETE FROM product_images WHERE path=$1',[product.image]);
       await client.query('COMMIT');
+      imageReader.invalidate(relativePath);
+      if (product.image) imageReader.invalidate(product.image);
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
   } finally { await fs.unlink(upload.path).catch(()=>{}); }
 }
@@ -37,11 +43,12 @@ async function removeImage(productId) {
     await client.query('UPDATE products SET image=NULL WHERE id=$1',[productId]);
     if (product.image) await client.query('DELETE FROM product_images WHERE path=$1',[product.image]);
     await client.query('COMMIT');
+    if (product.image) imageReader.invalidate(product.image);
   } catch(e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
 }
 const serveImage = asyncHandler(async (req,res,next) => {
   if (process.env.PRODUCT_IMAGE_STORAGE !== 'postgres') return next();
-  const {rows:[image]} = await pool.query('SELECT mime_type,contents FROM product_images WHERE path=$1',['/images'+req.path]);
+  const image = await imageReader.load('/images'+req.path);
   if (!image) return next();
   res.set('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; sandbox");
   res.set('Cache-Control','public, max-age=86400').type(image.mime_type).send(image.contents);

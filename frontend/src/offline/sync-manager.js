@@ -43,7 +43,7 @@ export class SyncManager {
     current=null;
    }
    const credential=await this.store.catalogCredential();
-   if(credential&&(refresh||rows.some(r=>r.state!=='review_required')||this.now()-this.refreshAt>5*60000)){
+   if(credential&&(refresh||rows.some(r=>r.state!=='review_required')||this.now()-this.refreshAt>5*60000)&&await this.store.catalogRefreshAllowed()){
     try{
      let snapshot=await this.http('/offline/catalog',{grant:credential.grant,body:{device_id:credential.deviceId}});snapshot=await this.cacheSnapshot(snapshot);const applied=await this.store.refreshCatalog(snapshot,credential);if(!applied.deferred){this.refreshAt=this.now();this.onCatalog?.();}
     }catch(e){await this.store.catalogFailure(e.status===401?'Sign in online to refresh the catalog.':e.message);if(e.status===401){const locked=await this.store.requireReauthorization(credential.userId);if(locked)this.onUnauthorized();}else if(!e.status||e.status>=500)transient=true;}
@@ -68,6 +68,6 @@ export async function startSynchronization(store,{baseUrl,cacheSnapshot}={}){
  await Network.addListener('networkStatusChange',state=>manager.networkChanged(state.connected));
  await App.addListener('appStateChange',state=>{if(state.isActive)manager.kick({refresh:true});});
  window.addEventListener('pos:offlineupdated',()=>manager.kick());window.addEventListener('pos:authorized',()=>manager.kick({retry:true,refresh:true}));window.addEventListener('pos:syncretry',()=>manager.kick({retry:true,refresh:true}));
- window.addEventListener('pos:cartpersisted',async()=>{try{if((await store.syncStatus()).catalogDeferred)manager.kick({refresh:true});}catch{await manager.emit({error:'SQLite is unavailable. Saved receipts will be checked again on retry.'});}});
+ window.addEventListener('pos:cartpersisted',async()=>{try{if((await store.syncStatus()).catalogDeferred&&await store.catalogRefreshAllowed())manager.kick({refresh:true});}catch{await manager.emit({error:'SQLite is unavailable. Saved receipts will be checked again on retry.'});}});
  manager.kick({refresh:true});return manager;
 }

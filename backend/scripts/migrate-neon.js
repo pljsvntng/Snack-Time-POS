@@ -41,9 +41,11 @@ async function command(name,args,config){
 async function fingerprint(client){
   await client.query("SET TIME ZONE 'Asia/Manila'");
   const {rows:tables}=await client.query("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename");
-  const result={tables:{},financialTotals:{}};
+  const result={fingerprintVersion:2,tables:{},financialTotals:{}};
   for(const {tablename:table} of tables){
-    const {rows}=await client.query(`SELECT to_jsonb(t)::text AS row FROM ${quote(table)} t ORDER BY to_jsonb(t)::text COLLATE "C"`);
+    // Hash each complete row inside PostgreSQL. Never transfer image BYTEA or
+    // receipt JSON merely to hash it again on the verification computer.
+    const {rows}=await client.query(`SELECT row FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS row FROM ${quote(table)} t) fingerprints ORDER BY row COLLATE "C"`);
     result.tables[table]={count:rows.length,sha256:digest(JSON.stringify(rows))};
     const {rows:decimals}=await client.query("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 AND data_type='numeric' ORDER BY column_name",[table]);
     for(const {column_name:column} of decimals){

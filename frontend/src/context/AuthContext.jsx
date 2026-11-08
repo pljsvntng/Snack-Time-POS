@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { api, imageUrl } from '../services/api';
 import { isAndroid, getOfflineStore, setOfflineMode, cacheImages,activateSynchronization } from '../offline/runtime';
+import {assertDatabaseIdentity} from '../offline/database-profile.js';
 
 const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
@@ -28,6 +29,7 @@ export function AuthProvider({ children }) {
         let data;
         try{data=await api.post('/auth/login',{username,password,offline_device_id:device});}
         catch(e){if(e.status===401)await store.revoke(username);throw e;}
+        assertDatabaseIdentity(data.database_id,import.meta.env.VITE_DATABASE_ID||'');
         await store.token(data.token);setOffline(false);
         if(data.offline_authorization){
           try {
@@ -46,6 +48,7 @@ export function AuthProvider({ children }) {
         await store.wakeDeliveries(data.user.id);window.dispatchEvent(new Event('pos:authorized'));setUser(data.user);return data.user;
       }
       const data=await api.post('/auth/login',{username,password});
+      assertDatabaseIdentity(data.database_id,import.meta.env.VITE_DATABASE_ID||'');
       localStorage.setItem('fh_token',data.token);localStorage.setItem('fh_user',JSON.stringify(data.user));setUser(data.user);return data.user;
     }catch(e){setError(e.message);throw e;}finally{setLoading(false);}
   },[]);

@@ -4,7 +4,7 @@ The existing Snack Time POS frontend now adapts to phone and tablet screens whil
 
 ## Layout behavior
 
-- Below 1200 px, navigation uses a touch-friendly drawer with all existing role-appropriate sections, a close control, Escape dismissal and focus handling. Desktop navigation stays visible.
+- Below 1200 px, navigation uses fixed bottom tabs and a scrollable More sheet with existing role-appropriate sections, a close control, Escape dismissal and focus handling. Desktop navigation stays visible. See [MOBILE-NAVIGATION.md](MOBILE-NAVIGATION.md) for the latest implementation and verification.
 - Phones below 760 px use a persistent order bar and cart bottom sheet. Short landscape screens below 1200 px also use the sheet, even when their width exceeds the phone breakpoint.
 - At 760 px and above with at least 560 px of height, products and the cart appear side by side. Removing the permanent sidebar from intermediate tablet widths provides more room for the cashier.
 - Product grids retain two columns on narrow phones and expand on tablets. Long names wrap. Quantity controls are 44 px and main touch controls are at least 48 px high; checkout is 54 px on touch layouts.
@@ -41,7 +41,7 @@ The read-only responsive browser suite uses a temporary frontend/API and emulate
 
 At every size, it checks product columns, navigation, cart visibility, customization, quantity/remove touch targets, discounts, checkout access, payment access, seven administration/history/report screens, product/user forms, settings, and document/content overflow. Additional checks cover a 393 × 400 keyboard-sized viewport, preserving the cart during rotation, payment focus trapping/Escape, and cashier navigation. All non-GET API requests except login are blocked so no production sales or edits are made.
 
-Verification passed: all 11 viewport cases, mobile cashier navigation, rotation/cart preservation, reduced keyboard space, and payment focus handling. All five frontend regression tests, the existing desktop browser workflow, and the production build passed. Post-test database verification confirmed that all 440 original records and financial totals remained unchanged.
+The original responsive pass verified all 11 viewport cases, mobile cashier navigation, rotation/cart preservation, reduced keyboard space, and payment focus handling. At that time all five frontend regression tests, the existing desktop browser workflow, and the production build passed. Post-test database verification confirmed that all 440 original records and financial totals remained unchanged. Current navigation results and test counts are recorded in [MOBILE-NAVIGATION.md](MOBILE-NAVIGATION.md).
 
 Screenshots and machine-readable results are retained privately in `database/backups/responsive-verification/`. The existing full browser workflow test also covers historical receipt/report print rendering and role restrictions. The production build may retain the existing large-bundle advisory.
 

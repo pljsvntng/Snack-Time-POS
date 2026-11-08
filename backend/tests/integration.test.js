@@ -192,12 +192,19 @@ test('PostgreSQL POS API regression suite', async (t) => {
         assert.equal((await upload(c)).status,403);
         const result=await upload(a);assert.equal(result.status,200);const {image}=await result.json();
         const photo=await fetch(base.replace(/\/api$/,'')+image);assert.equal(photo.headers.get('content-type'),'image/png');assert.deepEqual(Buffer.from(await photo.arrayBuffer()),png);
+        const cached=await fetch(base.replace(/\/api$/,'')+image);assert.deepEqual(Buffer.from(await cached.arrayBuffer()),png);
         const {rows:[stored]}=await admin.query('SELECT contents FROM product_images WHERE path=$1',[image]);assert.deepEqual(stored.contents,png);
+        let verifiedRows=0;
+        await require('../scripts/migrate-neon').fingerprint({query:async(...args)=>{const result=await admin.query(...args);if(args[0].includes('FROM "product_images" t')){verifiedRows=result.rows.length;assert.ok(result.rows.every(row=>/^[a-f0-9]{64}$/.test(row.row)),'Verification must transfer digests, not image rows');}return result;}});
+        assert.equal(verifiedRows,1);
         assert.equal((await upload(a,Buffer.from('invalid image'))).status,400);
         assert.equal((await request('/products/1','GET',undefined,a)).image,image);
         const replacement=await (await upload(a)).json();assert.notEqual(replacement.image,image);
         assert.equal((await admin.query('SELECT 1 FROM product_images WHERE path=$1',[image])).rowCount,0);
+        assert.equal((await fetch(base.replace(/\/api$/,'')+image)).status,404,'Replaced photos must be evicted');
+        assert.equal((await fetch(base.replace(/\/api$/,'')+replacement.image)).status,200);
         await request('/products/1/image','DELETE',undefined,a);
+        assert.equal((await fetch(base.replace(/\/api$/,'')+replacement.image)).status,404,'Deleted photos must be evicted');
         assert.equal((await admin.query('SELECT 1 FROM product_images WHERE path=$1',[replacement.image])).rowCount,0);
         assert.equal((await request('/products/1','GET',undefined,a)).image,null);
       }finally{delete process.env.PRODUCT_IMAGE_STORAGE;}
@@ -217,6 +224,44 @@ test('PostgreSQL POS API regression suite', async (t) => {
       await request('/orders','POST',{...payload,request_id:'not-a-uuid'},c,400);
     });
 
+    await t.test('online to offline to online reauthorization preserves saved local sales and deducted stock',async()=>{
+      const {OfflineStore}=await import('../../frontend/src/offline/store.js');
+      const {openTestDatabase}=await import('../../frontend/tests/offline/node-driver.mjs');
+      const directory=fs.mkdtempSync(path.join(require('node:os').tmpdir(),'snacktime-login-roundtrip-'));
+      const driver=openTestDatabase(path.join(directory,'pos.sqlite'));
+      const store=new OfflineStore(driver,offlinePair.publicKey.export({format:'jwk'}));
+      try{
+        await store.initialize();const device=(await store.status()).deviceId;
+        const product=await request('/products','POST',{category_id:1,name:'Reauthorization fixture',price:'5.00',track_stock:true,stock:3},a,201);
+        const authorize=()=>request('/auth/login','POST',{username:'admin',password:'test-password',offline_device_id:device});
+        const first=await authorize();let snapshot=await request('/offline/catalog','POST',{device_id:device},first.token);
+        await store.enroll({password:'test-password',alias:'admin',grant:first.offline_authorization,snapshot});
+        store.lock();await store.token(null);await store.mode(true);assert.equal((await store.login('admin','test-password')).role,'cashier');
+        const requestId=require('crypto').randomUUID();await store.draft({request_id:requestId,items:[],discount:null});
+        const receipt=await store.checkout({request_id:requestId,items:[{product_id:product.id,quantity:1,selected_option_ids:[]}],payment_method:'cash',cash_received:'10.00',expected_total:'5.00'});
+        store.lock();await store.mode(false);const second=await authorize();assert.equal(second.user.role,'admin');
+        await store.token(second.token);snapshot=await request('/offline/catalog','POST',{device_id:device},second.token);
+        await store.enroll({password:'test-password',alias:'admin',grant:second.offline_authorization,snapshot});
+        assert.equal((await store.listOrders({localOnly:true}))[0].id,receipt.id);
+        assert.equal((await store.syncStatus()).pending,1);
+        assert.equal((await store.catalog('products')).find(p=>p.id===product.id).stock,2,'Reauthorization must not reset stock');
+        assert.equal((await admin.query('SELECT stock FROM products WHERE id=$1',[product.id])).rows[0].stock,3,'Local test sale remains unuploaded');
+      }finally{await store.tail;driver.close();fs.rmSync(directory,{recursive:true,force:true});}
+    });
+    await t.test('demo database identity rejects original online sessions and offline sale proofs',async()=>{
+      const previous=process.env.POS_DATABASE_ID;
+      try{
+        process.env.POS_DATABASE_ID='demo:isolated-test';
+        await request('/products','GET',undefined,a,401);
+        const device=require('crypto').randomUUID(),auth=await request('/auth/login','POST',{username:'admin',password:'test-password',offline_device_id:device});
+        assert.equal(auth.database_id,'demo:isolated-test');await request('/products','GET',undefined,auth.token);
+        const claims=require('jsonwebtoken').verify(auth.offline_authorization,offlinePair.publicKey,{algorithms:['RS256']});assert.equal(claims.database_id,'demo:isolated-test');
+        const wrong=require('jsonwebtoken').sign({...claims,database_id:'original:other-database'},offlinePair.privateKey,{algorithm:'RS256'});
+        await request('/offline/catalog','POST',{device_id:device},wrong,401);
+        assert.throws(()=>require('../utils/syncAuthentication').verifyOfflineGrant(wrong,{allowExpired:true}),/authorization expired or changed/);
+        await request('/offline/catalog','POST',{device_id:device},auth.offline_authorization);
+      }finally{if(previous)process.env.POS_DATABASE_ID=previous;else delete process.env.POS_DATABASE_ID;}
+    });
     await t.test('password reset invalidates issued session',async()=>{
       await request('/users/2','PUT',{password:'replacement-password'},a);
       await request('/products','GET',undefined,c,401);

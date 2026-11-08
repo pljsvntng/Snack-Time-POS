@@ -1,12 +1,13 @@
 import { CapacitorSQLite, SQLiteConnection } from '@capacitor-community/sqlite';
 import {registerPlugin} from '@capacitor/core';
 import {openSecureAndroidConnection} from './secure-android-open.js';
+import {databaseName} from './database-profile.js';
 const diagnostics=registerPlugin('SnackTimeStorageDiagnostics');
 
 export async function openAndroidDatabase() {
- const name='snack_time_offline';
+ const name=databaseName(import.meta.env.VITE_OFFLINE_DATABASE_PROFILE||'');
  const sqlite=new SQLiteConnection(CapacitorSQLite);
- const db=await openSecureAndroidConnection(sqlite,diagnostics);
+ const db=await openSecureAndroidConnection(sqlite,diagnostics,{database:name});
  const driver={
   query:async(sql,values=[]) => (await db.query(sql,values)).values||[],
   run:async(sql,values=[]) => { const result=await db.run(sql,values,false);return {changes:result.changes?.changes??0}; },

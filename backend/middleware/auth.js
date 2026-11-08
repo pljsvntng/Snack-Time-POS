@@ -16,6 +16,7 @@ async function verifyToken(req, res, next) {
   try { payload = jwt.verify(token, process.env.JWT_SECRET,{algorithms:['HS256']}); }
   catch { return next(new ApiError(401, 'Your session has expired. Please log in again.')); }
   try {
+    require('../utils/databaseIdentity').assertDatabaseIdentity(payload);
     const { rows: [user] } = await pool.query(
       `SELECT u.id, u.username, u.full_name AS "fullName", u.active, u.password_hash, r.name AS role
        FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = $1`, [payload.id]);

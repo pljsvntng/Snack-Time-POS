@@ -15,6 +15,7 @@
     "admin:setup": "node scripts/admin-console.js setup",
     "admin:reset": "node scripts/admin-console.js reset",
     "admin:test": "node tests/admin-live.cjs",
+    "demo:password": "node scripts/demo-password.js",
     "test": "node --test tests/*.test.js",
     "backup:mariadb": "node scripts/backup-mariadb.js",
     "migrate:postgresql": "node scripts/migrate-postgresql.js",

@@ -68,6 +68,12 @@ export class SyncStore {
   return this.db.transaction(()=>this.cacheSnapshot(snapshot));
  });}
  async catalogFailure(message){return this.exclusive(()=>this.setMeta('sync_catalog_error',message.slice(0,300)));}
+ async catalogRefreshAllowed(){return this.exclusive(async()=>{
+  const drafts=await this.db.query('SELECT data_json FROM drafts');
+  const allowed=!drafts.some(d=>JSON.parse(d.data_json).items?.length);
+  if(!allowed)await this.setMeta('sync_catalog_deferred',true);
+  return allowed;
+ });}
  async wakeDeliveries(userId){return this.exclusive(()=>this.db.run("UPDATE sync_outbox SET state='pending',next_attempt_ms=0,error=NULL WHERE state='auth_required' AND user_id=?",[userId]));}
  async requireReauthorization(userId){return this.exclusive(async()=>{
   await this.db.run('UPDATE authorized_users SET revoked=1 WHERE user_id=?',[userId]);

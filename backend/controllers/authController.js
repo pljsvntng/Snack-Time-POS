@@ -30,6 +30,7 @@ const login = asyncHandler(async (req, res) => {
 
   const token = jwt.sign(
     { id: user.id, username: user.username, role: user.role, fullName: user.full_name,
+      ...(require('../utils/databaseIdentity').databaseIdentity()?{database_id:require('../utils/databaseIdentity').databaseIdentity()}:{}),
       credentialVersion: require('crypto').createHash('sha256').update(user.password_hash).digest('hex') },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
@@ -42,6 +43,7 @@ const login = asyncHandler(async (req, res) => {
   }
   res.set('Cache-Control','no-store');
   res.json({
+    database_id: require('../utils/databaseIdentity').databaseIdentity(),
     offline_authorization, offline_error,
     token,
     user: { id: user.id, username: user.username, fullName: user.full_name, role: user.role },

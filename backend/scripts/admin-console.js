@@ -3,12 +3,12 @@ const {hiddenPrompt}=require('../utils/hiddenPrompt');
 const {administrators,setupAdministrator,resetAdministrator}=require('../utils/administrator');
 async function main(){
  const [command,...args]=process.argv.slice(2),allowed=new Set(['--target','--username','--email','--name']);const settings={};
- if(!['status','setup','reset'].includes(command))throw Error('Use admin:status, admin:setup or admin:reset with --target cloud|local.');
+ if(!['status','setup','reset'].includes(command))throw Error('Use admin:status, admin:setup or admin:reset with --target cloud|local|demo.');
  for(let i=0;i<args.length;i+=2){if(!allowed.has(args[i])||!args[i+1]||args[i+1].startsWith('--'))throw Error('Unsupported arguments. Never put passwords in command arguments.');settings[args[i].slice(2)]=args[i+1];}
- if(!['cloud','local'].includes(settings.target))throw Error('Select --target cloud or --target local explicitly.');
+ if(!['cloud','local','demo'].includes(settings.target))throw Error('Select --target cloud, --target demo or --target local explicitly.');
  const {Pool,options}=require('../config/postgresql');
- if(settings.target==='cloud'){
-  const config=require('dotenv').parse(fs.readFileSync(path.join(__dirname,'../.env.neon')));
+ if(settings.target==='cloud'||settings.target==='demo'){
+  const config=require('dotenv').parse(fs.readFileSync(path.join(__dirname,settings.target==='demo'?'../.env.demo':'../.env.neon')));
   if(!config.DATABASE_URL||!new URL(config.DATABASE_URL).hostname.endsWith('.neon.tech'))throw Error('Configure the private Neon DATABASE_URL first.');
   process.env.DATABASE_URL=config.DATABASE_URL;
  }else delete process.env.DATABASE_URL;
@@ -29,11 +29,12 @@ async function main(){
   const confirmation=await hiddenPrompt('Confirm passphrase (hidden): ');
   if(password!==confirmation)throw Error('Passphrases do not match. No password was changed.');
   const result=command==='reset'?await resetAdministrator(pool,{username:selected.username,password,approved:true}):await setupAdministrator(pool,{username:settings.username,email:settings.email,fullName:settings.name||'Administrator',password});
-  if(command==='reset'&&settings.target==='cloud'){
+  if(command==='reset'&&['cloud','demo'].includes(settings.target)){
    const vault=require('../utils/ownerCredentialVault');
-   if(fs.existsSync(vault.vaultPath))try{
-    const data=vault.readVault(),config=options();
-    if(data.targetHost===config.host&&data.targetDatabase===config.database){const entry=data.accounts.find(a=>a.username===selected.username);if(entry){entry.password=password;vault.saveVault(data);}}
+   const vaultFile=settings.target==='demo'?path.join(__dirname,'../.credentials.demo.dpapi.json'):vault.vaultPath;
+   if(fs.existsSync(vaultFile))try{
+    const data=vault.readVault(vaultFile),config=options();
+    if(data.targetHost===config.host&&data.targetDatabase===config.database){const entry=data.accounts.find(a=>a.username===selected.username);if(entry){entry.password=password;vault.saveVault(data,vaultFile);}}
    }catch{console.error('Password changed, but the protected owner test credential could not be refreshed. The new database password is active.');}
   }
   password='';

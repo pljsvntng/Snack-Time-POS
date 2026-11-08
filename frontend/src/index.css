@@ -677,14 +677,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--primary); outli
   .product-card, .option-choice, button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 }
 
-/* Tablets keep the entire width for cashier work; every admin section stays in the drawer. */
+/* Tablets keep the entire width for cashier work; mobile navigation sits below it. */
 @media (max-width: 1199px) {
-  .sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 300; width: min(320px, calc(100vw - 24px));
-    transform: translateX(-105%); visibility: hidden; transition: transform .18s ease, visibility .18s;
-    box-shadow: var(--shadow-lg); padding-top: max(16px, env(safe-area-inset-top)); padding-bottom: max(14px, env(safe-area-inset-bottom)); }
-  .sidebar.open { transform: translateX(0); visibility: visible; }
-  .sidebar-backdrop.show { display: block; position: fixed; inset: 0; background: rgba(42,38,35,.45); z-index: 250; }
-  .navigation-close, .mobile-menu-btn { display: inline-flex; }
+  .sidebar { display: none; }
   .topbar-title { display: block; }
   .topbar { padding: 6px max(16px, env(safe-area-inset-right)) 6px max(12px, env(safe-area-inset-left)); min-height: 60px; gap: 12px; }
   .page-body { padding: 20px; }
@@ -857,3 +852,38 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--primary); outli
 .sync-review-row input,.sync-review-row textarea { width:100%; max-width:480px; display:block; min-height:44px; }
 .native-navigation-error { position:fixed; top:0; left:0; right:0; z-index:1000; background:var(--warning-soft); color:var(--text); padding:12px; }
 .native-storage-error { padding:24px; max-width:600px; margin:auto; overflow-wrap:anywhere; }
+
+/* Web tabs share the existing 1200px desktop/sidebar breakpoint; Android keeps
+   tabs on wide tablets too, preserving the full width for cashier work.
+   Native SystemBars already insets the WebView; env() also protects web/PWA views. */
+:root { --mobile-nav-height: 64px; --mobile-nav-bottom: env(safe-area-inset-bottom, 0px); }
+.mobile-bottom-nav { display:none; }
+.mobile-more-overlay { position:fixed; inset:0; z-index:380; display:flex; align-items:flex-end; justify-content:center; background:rgba(42,38,35,.45); }
+.mobile-more-sheet { display:flex; flex-direction:column; width:100%; max-width:600px; max-height:85vh; max-height:85dvh; background:var(--card-bg); border:1px solid var(--border); border-bottom:0; border-radius:20px 20px 0 0; box-shadow:var(--shadow-lg); padding-bottom:var(--mobile-nav-bottom); overflow:hidden; }
+.more-menu-header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 12px 8px 20px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.more-menu-header h2 { font-size:19px; margin:0; }
+.more-menu-close { display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:var(--radius-sm); background:var(--surface-2); color:var(--text); }
+.more-menu-content { overflow-y:auto; overscroll-behavior:contain; padding:8px max(12px, env(safe-area-inset-right)) 12px max(12px, env(safe-area-inset-left)); }
+.more-menu-account { display:flex; align-items:center; gap:12px; margin:0 4px 8px; padding:12px 4px 16px; border-bottom:1px solid var(--border); }
+.more-menu-account>svg { flex-shrink:0; color:var(--primary); }
+.more-menu-account>div { min-width:0; overflow-wrap:anywhere; }
+.more-menu-account b,.more-menu-account span { display:block; }
+.more-menu-account span { color:var(--text-muted); font-size:13px; margin-top:3px; }
+.more-menu-item { display:flex; align-items:center; gap:12px; min-height:48px; width:100%; padding:12px; border-radius:var(--radius-sm); background:transparent; color:var(--text); text-decoration:none; text-align:left; font:inherit; overflow-wrap:anywhere; }
+.more-menu-item svg { flex-shrink:0; }
+.more-menu-item:hover,.more-menu-item.active { background:var(--primary-soft); color:var(--primary); }
+.more-menu-logout { color:var(--danger); margin-top:8px; }
+  .has-bottom-nav .sidebar { display:none; }
+  .has-bottom-nav .topbar-title { display:block; }
+  .has-bottom-nav .main-content { padding-bottom:calc(var(--mobile-nav-height) + var(--mobile-nav-bottom)); }
+  .has-bottom-nav .mobile-bottom-nav { position:fixed; inset:auto 0 0; z-index:220; display:flex; align-items:stretch; justify-content:center; min-height:calc(var(--mobile-nav-height) + var(--mobile-nav-bottom)); padding:0 max(4px, env(safe-area-inset-right)) var(--mobile-nav-bottom) max(4px, env(safe-area-inset-left)); background:var(--card-bg); border-top:1px solid var(--border); box-shadow:0 -2px 8px rgba(42,38,35,.04); }
+  .bottom-nav-item { flex:1 1 0; min-width:0; max-width:160px; min-height:calc(var(--mobile-nav-height) - 1px); padding:5px 2px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font:inherit; font-size:11px; line-height:1.25; text-align:center; text-decoration:none; background:transparent; color:var(--text-muted); }
+  .bottom-nav-icon { display:flex; align-items:center; justify-content:center; width:48px; height:30px; border-radius:12px; }
+  .bottom-nav-item.active { color:var(--primary); font-weight:700; }
+  .bottom-nav-item.active .bottom-nav-icon,.bottom-nav-item:hover .bottom-nav-icon { background:var(--primary-soft); }
+  .bottom-nav-item:focus-visible { outline:2px solid var(--primary); outline-offset:-3px; border-radius:var(--radius-sm); }
+  .has-bottom-nav .cart-fab { bottom:calc(var(--mobile-nav-height) + var(--mobile-nav-bottom) + 12px); }
+  .has-bottom-nav .toast { bottom:calc(var(--mobile-nav-height) + var(--mobile-nav-bottom) + 84px); }
+  /* Cart and payment dialogs are higher layers and use the entire resized viewport. */
+  .app-shell:has(.modal-overlay) .mobile-bottom-nav,.app-shell:has(.cart-panel.open[aria-modal="true"]) .mobile-bottom-nav { visibility:hidden; }
+@media print { .mobile-bottom-nav,.mobile-more-overlay { display:none !important; } .has-bottom-nav .main-content { padding-bottom:0; } }

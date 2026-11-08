@@ -10,6 +10,8 @@ const {spawnSync}=require('node:child_process');
  const health=await fetch(new URL('/api/health',url),{signal:AbortSignal.timeout(90000)});
  const status=await health.json();
  if(!health.ok||status.status!=='ok'||status.database!=='postgresql')throw Error('The production API health check failed. Android build stopped.');
+ const expected=process.env.VITE_DATABASE_ID||settings.VITE_DATABASE_ID;
+ if(expected&&status.database_id!==expected)throw Error('Android build refused an API for a different POS database.');
  await build({mode:'android'});
  const result=spawnSync(process.execPath,[path.join(root,'node_modules/@capacitor/cli/bin/capacitor'),'sync','android'],{cwd:root,stdio:'inherit',windowsHide:true});
  if(result.status!==0)process.exitCode=result.status||1;
