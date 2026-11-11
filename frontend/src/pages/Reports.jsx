@@ -1,3 +1,4 @@
+import PageHeader from '../components/PageHeader';
 import TableScroll from '../components/TableScroll';
 import { useEffect, useState } from 'react';
 import { Printer, Banknote, ReceiptText, Package, Tag } from 'lucide-react';
@@ -30,18 +31,17 @@ export default function Reports() {
 
   return (
     <div className="report-print">
-      <div className="page-header">
-        <h2>Sales Reports</h2>
+      <PageHeader title="Sales reports" description="See what sold, what earned and how your business is doing.">
         <button className="btn btn-outline" onClick={handlePrint}><Printer size={16} /> Print / Export</button>
-      </div>
+      </PageHeader>
 
       <div className="filter-row">
-        <select value={range} onChange={(e) => setRange(e.target.value)}>
+        <select aria-label="Report period" value={range} onChange={(e) => setRange(e.target.value)}>
           <option value="daily">Daily</option>
           <option value="weekly">Weekly</option>
           <option value="monthly">Monthly</option>
         </select>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <input aria-label="Report date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </div>
 
       {error ? <div className="login-error" role="alert">{error}</div> : loading || !report ? (

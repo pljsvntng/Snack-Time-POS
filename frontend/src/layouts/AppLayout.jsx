@@ -15,7 +15,7 @@ const ADMIN_LINKS = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/products', icon: Tag, label: 'Products' },
   { to: '/inventory', icon: Boxes, label: 'Inventory' },
-  { to: '/transactions', icon: ReceiptText, label: 'Orders' },
+  { to: '/transactions', icon: ReceiptText, label: 'Transactions' },
   { to: '/reports', icon: BarChart3, label: 'Reports' },
   { to: '/users', icon: UsersIcon, label: 'Users' },
   { to: '/settings', icon: SettingsIcon, label: 'Settings' },
@@ -40,6 +40,7 @@ export default function AppLayout() {
 
   const links = user?.role === 'admin' ? ADMIN_LINKS : CASHIER_LINKS;
   const isPos = location.pathname === '/pos';
+  const isCashier = user?.role === 'cashier';
 
   const handleLogout = () => {
     logout();
@@ -47,57 +48,22 @@ export default function AppLayout() {
   };
 
   return (
-    <div className={`app-shell ${drawer ? 'has-bottom-nav' : ''}`}>
-      <aside className="sidebar" inert={drawer ? '' : undefined} aria-label="Main navigation">
-        <div className="sidebar-logo">
-          <BrandLockup />
-        </div>
-        <nav className="sidebar-nav" aria-label="POS sections">
-          {links.map((link) => {
-            const Icon = link.icon;
-            return (
-              <NavLink
-                key={link.to}
-                to={link.to}
-                className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-                onClick={() => setMenuOpen(false)}
-              >
-                <Icon size={18} />
-                <span>{link.label}</span>
-              </NavLink>
-            );
-          })}
-        </nav>
-        <div className="sidebar-footer">
-          <div className="sidebar-user">
-            <span className="sidebar-avatar"><User size={16} /></span>
-            <div style={{ minWidth: 0 }}>
-              <b>{user?.fullName}</b>
-              {user?.role === 'admin' ? 'Administrator' : 'Cashier'}
-            </div>
-          </div>
-          <button className="btn btn-outline btn-block" onClick={handleLogout}>
-            <LogOut size={16} />
-            Log out
-          </button>
-        </div>
-      </aside>
-
+    <div className={`app-shell horizontal-shell ${drawer ? 'has-bottom-nav' : ''} ${isCashier ? 'cashier-shell' : 'admin-shell'}`}>
       <div className="main-content" inert={drawer && menuOpen ? '' : undefined}>
-        <header className="topbar">
-          <span className="topbar-title">{links.find(link => link.to === location.pathname)?.label || 'Snack Time POS'}</span>
-          <div className="topbar-date">
-            <CalendarDays size={16} />
-            <time dateTime={new Date().toISOString()}>
-              <span className="date-full">{new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-              <span className="date-compact">{new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</span>
-            </time>
+        <header className="topbar workspace-header">
+          <div className="workspace-brand"><BrandLockup size={36} /></div>
+          {!drawer && <nav className="workspace-top-nav" aria-label={isCashier ? 'Cashier navigation' : 'Administrator navigation'}>
+            {links.map(({ to, icon: Icon, label }) => <NavLink key={to} to={to} className={({ isActive }) => isActive ? 'workspace-nav-link active' : 'workspace-nav-link'}><Icon size={16} /><span>{to === '/pos' ? 'POS' : isCashier ? 'Transaction history' : label}</span></NavLink>)}
+          </nav>}
+          <div className="workspace-account">
+            <span className="sidebar-avatar"><User size={17} /></span>
+            <div className="workspace-user"><b>{user?.fullName}</b><small>{user?.offline ? 'Offline cash register' : isCashier ? 'Cashier' : 'Administrator'}</small></div>
+            <time className="workspace-date" dateTime={new Date().toISOString()} title={new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Manila' })}><CalendarDays size={14} />{new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'Asia/Manila' })}</time>
+            {!drawer && <button className="btn btn-ghost workspace-logout" onClick={handleLogout} aria-label="Log out"><LogOut size={18} /></button>}
           </div>
         </header>
         <SyncIndicator revealRequest={syncRequest} />
-        <div className={`page-body ${isPos ? 'page-body-pos' : ''}`}>
-          <Outlet />
-        </div>
+        <div className={`page-body ${isPos ? 'page-body-pos' : ''}`}><Outlet /></div>
       </div>
       {drawer && <MobileNavigation links={links} user={user} android={android} open={menuOpen} onOpen={() => setMenuOpen(true)} onClose={() => setMenuOpen(false)} onLogout={handleLogout} onSync={() => { setMenuOpen(false); setSyncRequest(value => value + 1); }} />}
     </div>

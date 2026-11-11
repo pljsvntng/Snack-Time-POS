@@ -1,17 +1,21 @@
 import TableScroll from '../components/TableScroll';
+import PageHeader from '../components/PageHeader';
+import OrderTypeBreakdown from '../components/OrderTypeBreakdown';
+import { orderTypeLabel } from '../utils/orderDetails';
+import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   BarChart, Bar, PieChart, Pie, Cell, Legend,
 } from 'recharts';
-import { Banknote, ReceiptText, Package, TrendingUp, Award, AlertTriangle } from 'lucide-react';
+import { Banknote, ReceiptText, Package, AlertTriangle, ArrowRight, ShoppingCart, UtensilsCrossed, ShoppingBag } from 'lucide-react';
 import { api } from '../services/api';
 import useMediaQuery from '../hooks/useMediaQuery';
 import { peso, formatDateTime } from '../utils/currency';
 
-const COLORS = ['#C2540A', '#F2A33A', '#2E7D32', '#6B4A2F', '#D9A066', '#8B8176', '#BF3B2B'];
-const GRID = '#E8DCC9';
-const AXIS = { fontSize: 12, fill: '#675F56' };
+const COLORS = ['#D62828', '#F4B400', '#8B5E3C', '#2E7D32', '#F97316', '#78716C', '#A61B1B'];
+const GRID = '#EDE6DF';
+const AXIS = { fontSize: 12, fill: '#78716C' };
 // Presentation only: shows the API's ISO date as e.g. "Oct 17" (the data itself is unchanged).
 const shortDay = (v) => {
   const d = new Date(v);
@@ -23,6 +27,7 @@ export default function Dashboard() {
   const tooltipLayout = { position: compact ? { x: 0, y: 0 } : undefined, wrapperStyle: { maxWidth: '100%' }, contentStyle: { whiteSpace: 'normal' } };
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [trend, setTrend] = useState('week');
 
   useEffect(() => {
     api.get('/reports/dashboard').then(setData).catch((e) => setError(e.message));
@@ -30,10 +35,15 @@ export default function Dashboard() {
 
   if (error) return <div className="empty-state">{error}</div>;
   if (!data) return <div className="empty-state">Loading dashboard...</div>;
+  const dineIn = data.order_types_today?.find(row => row.order_type === 'dine_in');
+  const takeout = data.order_types_today?.find(row => row.order_type === 'takeout');
+  const trendData = trend === 'month' ? data.daily_sales_last_30_days : trend === 'halfyear' ? data.monthly_sales_last_6_months : data.daily_sales_last_7_days;
 
   return (
     <div>
-      <div className="page-header"><h2>Dashboard</h2></div>
+      <PageHeader eyebrow="Snack Time · Management" title="Your shop, at a glance." description="A clear view of today’s sales, service and stock.">
+        <Link className="btn btn-primary" to="/pos"><ShoppingCart size={17} /> Open register <ArrowRight size={16} /></Link>
+      </PageHeader>
 
       <div className="stat-grid stat-grid-six">
         <div className="card stat-card">
@@ -52,26 +62,24 @@ export default function Dashboard() {
         </div>
         <div className="card stat-card">
           <div>
-            <div className="label">Items Sold</div>
-            <div className="value">{data.items_sold_today}</div>
+            <div className="label">Dine-In Orders</div>
+            <div className="value">{dineIn?.orders ?? '—'}</div>
+          </div>
+          <span className="stat-icon"><UtensilsCrossed size={20} /></span>
+        </div>
+        <div className="card stat-card">
+          <div>
+            <div className="label">Takeout Orders</div>
+            <div className="value">{takeout?.orders ?? '—'}</div>
+          </div>
+          <span className="stat-icon"><ShoppingBag size={20} /></span>
+        </div>
+        <div className="card stat-card">
+          <div>
+            <div className="label">Total Products</div>
+            <div className="value">{data.total_products ?? '—'}</div>
           </div>
           <span className="stat-icon"><Package size={20} /></span>
-        </div>
-        <div className="card stat-card">
-          <div>
-            <div className="label">Average Order</div>
-            <div className="value">{peso(data.average_transaction)}</div>
-          </div>
-          <span className="stat-icon"><TrendingUp size={20} /></span>
-        </div>
-        <div className="card stat-card">
-          <div>
-            <div className="label">Best Selling Product</div>
-            <div className="value" style={{ fontSize: 16, lineHeight: 1.3 }}>
-              {data.best_sellers_last_30_days[0]?.product_name || '—'}
-            </div>
-          </div>
-          <span className="stat-icon"><Award size={20} /></span>
         </div>
         <div className="card stat-card">
           <div>
@@ -84,34 +92,37 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <div className="dashboard-sales-details"><span>Items sold today <b>{data.items_sold_today}</b></span><span>Average order <b>{peso(data.average_transaction)}</b></span><span>Top seller · 30 days <b>{data.best_sellers_last_30_days[0]?.product_name || 'No sales yet'}</b></span></div>
+      <OrderTypeBreakdown rows={data.order_types_today} />
+
       <div className="dash-grid">
         <div className="card">
-          <div className="section-title">Sales — Last 7 Days</div>
+          <div className="chart-heading"><div className="section-title">Revenue overview</div><select aria-label="Revenue chart period" value={trend} onChange={e => setTrend(e.target.value)}><option value="week">Last 7 days</option><option value="month">Last 30 days</option><option value="halfyear">Last 6 months</option></select></div>
           <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={data.daily_sales_last_7_days.map(row => ({ ...row, sales: Number(row.sales) }))}>
+            <LineChart data={(trendData || []).map(row => ({ ...row, sales: Number(row.sales) }))}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
               <XAxis dataKey="day" tick={AXIS} tickFormatter={shortDay} />
               <YAxis tick={AXIS} />
               <Tooltip {...tooltipLayout} formatter={(v) => peso(v)} labelFormatter={shortDay} />
-              <Line type="monotone" dataKey="sales" stroke="#C2540A" strokeWidth={2.5} dot={{ r: 3.5 }} />
+              <Line type="monotone" dataKey="sales" stroke="#D62828" strokeWidth={2.5} dot={{ r: 3.5 }} />
             </LineChart>
           </ResponsiveContainer>
 
           <div className="section-title" style={{ marginTop: 20 }}>Best Sellers (30 days)</div>
-          <ResponsiveContainer width="100%" height={240}>
+          {data.best_sellers_last_30_days.length === 0 ? <div className="chart-empty">Your best sellers will appear after your first sale.</div> : <ResponsiveContainer width="100%" height={240}>
             <BarChart data={data.best_sellers_last_30_days.map(row => ({ ...row, qty_sold: Number(row.qty_sold) }))} layout="vertical" margin={{ left: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
               <XAxis type="number" tick={AXIS} />
               <YAxis type="category" dataKey="product_name" width={140} tick={{ ...AXIS, fontSize: 11.5 }} />
               <Tooltip {...tooltipLayout} formatter={(v) => v} />
-              <Bar dataKey="qty_sold" fill="#F2A33A" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="qty_sold" fill="#F4B400" radius={[0, 4, 4, 0]} />
             </BarChart>
-          </ResponsiveContainer>
+          </ResponsiveContainer>}
         </div>
 
         <div className="card">
           <div className="section-title">Sales by Category (30 days)</div>
-          <ResponsiveContainer width="100%" height={220}>
+          {data.sales_by_category_last_30_days.length === 0 ? <div className="chart-empty">No category sales in the last 30 days.</div> : <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie data={data.sales_by_category_last_30_days.map(row => ({ ...row, revenue: Number(row.revenue) }))} dataKey="revenue" nameKey="category" outerRadius={80}>
                 {data.sales_by_category_last_30_days.map((entry, i) => (
@@ -121,7 +132,7 @@ export default function Dashboard() {
               <Tooltip {...tooltipLayout} formatter={(v) => peso(v)} />
               <Legend wrapperStyle={{ fontSize: 11.5 }} formatter={(v) => <span style={{ color: '#2A2623' }}>{v}</span>} />
             </PieChart>
-          </ResponsiveContainer>
+          </ResponsiveContainer>}
 
           <div className="section-title" style={{ marginTop: 16 }}>Payment Methods Today</div>
           {data.payment_breakdown_today.length === 0 ? (
@@ -142,14 +153,16 @@ export default function Dashboard() {
         <TableScroll>
           <table className="data-table">
             <thead>
-              <tr><th>Order #</th><th>Date/Time</th><th>Cashier</th><th className="num">Total</th><th>Payment</th><th>Status</th></tr>
+              <tr><th>Order #</th><th>Date/Time</th><th>Cashier</th><th>Order type</th><th className="num">Total</th><th>Payment</th><th>Status</th></tr>
             </thead>
             <tbody>
+              {data.recent_transactions.length === 0 && <tr><td colSpan={7} className="table-empty">No transactions yet. Open the register to take your first order.</td></tr>}
               {data.recent_transactions.map((t) => (
                 <tr key={t.id}>
                   <td>{t.order_number}</td>
                   <td>{formatDateTime(t.created_at)}</td>
                   <td>{t.cashier_name}</td>
+                  <td><span className={`order-type-badge ${t.order_type || 'unspecified'}`}>{orderTypeLabel(t.order_type)}</span></td>
                   <td className="num">{peso(t.total)}</td>
                   <td style={{ textTransform: 'capitalize' }}>{t.payment_method}</td>
                   <td><span className={`badge badge-${t.status}`}>{t.status}</span></td>

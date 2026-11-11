@@ -1,3 +1,4 @@
+import DialogSurface from './DialogSurface';
 import { AlertTriangle, HelpCircle, X } from 'lucide-react';
 
 // Reusable themed confirmation dialog, replacing the browser's native confirm().
@@ -11,7 +12,7 @@ export default function ConfirmDialog({
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+      <DialogSurface label={title} onClose={onCancel} className="" style={{ maxWidth: 400 }}>
         <button className="modal-close" aria-label="Close" onClick={onCancel}><X size={18} /></button>
         <div className="modal-body">
           <div className={`confirm-icon ${danger ? 'danger' : ''}`}>
@@ -26,7 +27,7 @@ export default function ConfirmDialog({
             </button>
           </div>
         </div>
-      </div>
+      </DialogSurface>
     </div>
   );
 }

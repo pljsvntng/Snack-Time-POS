@@ -8,7 +8,8 @@ import CartPanel from '../components/CartPanel';
 import PaymentModal from '../components/PaymentModal';
 import ReceiptView from '../components/ReceiptView';
 import Toast from '../components/Toast';
-import { Search, SearchX, Check, Printer, Plus, ShoppingCart } from 'lucide-react';
+import DialogSurface from '../components/DialogSurface';
+import { Search, SearchX, Check, Printer, Plus, ShoppingCart, X } from 'lucide-react';
 import { CategoryIcon } from '../utils/categoryIcons';
 import { peso } from '../utils/currency';
 import { buildCatalog, cardStock, stockMessage, findStockIssues, issuesMessage } from '../utils/stock';
@@ -131,6 +132,7 @@ export default function POS() {
         discount_id: cart.discount?.id,
         payment_method,
         cash_received,
+        ...cart.orderDetails,
       };
       const order = await api.post('/orders', payload);
       setCompletedOrder(order);
@@ -152,20 +154,25 @@ export default function POS() {
   return (
     <div className="pos-layout">
       <div className="pos-menu">
+        <div className="pos-browse-toolbar">
+          <header className="pos-heading"><div><p className="eyebrow">Snack Time kitchen</p><h2>Made for snack time.</h2></div></header>
         <div className="pos-search-row">
           <div className="search-field">
             <Search size={16} />
-            <input placeholder="Search products..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input aria-label="Search products" placeholder="Search products..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            {search && <button className="search-clear" aria-label="Clear product search" onClick={() => setSearch('')}><X size={16} /></button>}
           </div>
+        </div>
         </div>
 
         <div className="category-tabs">
-          <button className={`category-tab ${activeCategory === 'all' ? 'active' : ''}`} onClick={() => setActiveCategory('all')}>
-            <CategoryIcon slug="all" /> All
+          <button aria-pressed={activeCategory === 'all'} className={`category-tab ${activeCategory === 'all' ? 'active' : ''}`} onClick={() => setActiveCategory('all')}>
+            <CategoryIcon slug="all" /> All items
           </button>
           {categories.map((c) => (
             <button
               key={c.id}
+              aria-pressed={activeCategory === c.slug}
               className={`category-tab ${activeCategory === c.slug ? 'active' : ''}`}
               onClick={() => setActiveCategory(c.slug)}
             >
@@ -173,6 +180,8 @@ export default function POS() {
             </button>
           ))}
         </div>
+
+        <div className="menu-section-heading"><h3>{activeCategory === 'all' ? 'All menu items' : categories.find(c => c.slug === activeCategory)?.name}</h3><span role="status">{loading ? 'Loading menu…' : `${filteredProducts.length} items`}</span></div>
 
         {loading ? (
           <div className="skeleton-grid">
@@ -199,6 +208,7 @@ export default function POS() {
                 stock={cardStock(product, cart.items, catalog)}
                 onClick={handleProductClick}
                 onBlocked={handleBlockedClick}
+                quantity={cart.items.filter(item => item.product.id === product.id).reduce((count, item) => count + item.quantity, 0)}
               />
             ))}
           </div>
@@ -231,6 +241,7 @@ export default function POS() {
         <PaymentModal
           total={cart.total}
           cashOnly={offline}
+          orderDetails={cart.orderDetails}
           submitting={submitting}
           onClose={() => setShowPayment(false)}
           onConfirm={handleConfirmPayment}
@@ -239,7 +250,8 @@ export default function POS() {
 
       {completedOrder && (
         <div className="modal-overlay">
-          <div className="modal-box">
+          <DialogSurface label="Payment successful" onClose={handleNewOrder}>
+            <button className="modal-close" aria-label="Close receipt" onClick={handleNewOrder}><X size={18} /></button>
             <div className="modal-body">
               <div className="payment-success-banner">
                 <div className="payment-success-check"><Check size={28} /></div>
@@ -254,7 +266,7 @@ export default function POS() {
                 <button className="btn btn-primary btn-block" onClick={handleNewOrder}><Plus size={16} /> New Order</button>
               </div>
             </div>
-          </div>
+          </DialogSurface>
         </div>
       )}
 

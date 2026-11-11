@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
 import { api } from '../services/api';
 import Toast from '../components/Toast';
+import PageHeader from '../components/PageHeader';
+import { BrandMark } from '../components/Brand';
 
 export default function Settings() {
   const [form, setForm] = useState({});
@@ -28,10 +30,13 @@ export default function Settings() {
 
   return (
     <div>
-      <div className="page-header"><h2>Business Settings</h2></div>
+      <PageHeader title="Business settings" description="The details that make every receipt yours." />
 
-      <div className="card" style={{ maxWidth: 560 }}>
+      <div className="settings-layout">
+      <div className="card settings-form-card">
+        <div className="section-heading"><h3>Shop & receipt details</h3><p>Keep your business information up to date.</p></div>
         <form onSubmit={handleSave}>
+          <div className="form-grid">
           <div className="form-group">
             <label htmlFor="settings-field-1">Business Name</label>
             <input id="settings-field-1" value={form.business_name || ''} onChange={(e) => handleChange('business_name', e.target.value)} />
@@ -60,8 +65,15 @@ export default function Settings() {
               <option value="80mm">80mm (standard thermal)</option>
             </select>
           </div>
-          <button className="btn btn-primary" type="submit"><Save size={16} /> Save Settings</button>
+          </div>
+          <div className="settings-save"><span>Changes apply to future receipts.</span><button className="btn btn-primary" type="submit"><Save size={16} /> Save Settings</button></div>
         </form>
+      </div>
+      <aside className="settings-preview card">
+        <p className="eyebrow">A personal touch</p><h3>Your receipt identity</h3>
+        <div className="receipt-identity"><BrandMark size={48} monochrome /><strong>{form.business_name || 'Your business name'}</strong><span>{form.address || 'Your business address'}</span><span>{form.contact_number || 'Your contact number'}</span><hr /><p>{form.receipt_footer || 'Your thank-you message'}</p></div>
+        <p className="page-description">Preview of your shop details. Save your changes to use them on new receipts.</p>
+      </aside>
       </div>
 
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />

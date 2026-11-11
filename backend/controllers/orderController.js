@@ -6,6 +6,7 @@ Decimal.set({ precision: 40, rounding: Decimal.ROUND_HALF_UP });
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { generateOrderNumber } = require('../utils/orderNumber');
+const { orderDetails, hasOrderDetails } = require('../utils/orderDetails');
 
 // Loads a product plus its option groups/options, for validating an order line.
 async function loadProductForOrder(connection, productId) {
@@ -61,6 +62,7 @@ function resolveOptions(groups, options, selectedOptionIds) {
 // POST /api/orders
 const createOrder = asyncHandler(async (req, res) => {
   const { items, discount_id, payment_method, cash_received } = req.body;
+  const details = orderDetails(req.body);
 
   if (!Array.isArray(items) || items.length === 0) {
     throw new ApiError(400, 'Cannot complete an order with no items.');
@@ -84,7 +86,8 @@ const createOrder = asyncHandler(async (req, res) => {
     items:items.map(item=>({product_id:Number(item.product_id),quantity:item.quantity,selected_option_ids:Array.isArray(item.selected_option_ids)?item.selected_option_ids.map(id=>number(id,'Option',{min:1,integer:true})).sort((a,b)=>a-b):item.selected_option_ids??[]})),
     discount_id:discount_id?number(discount_id,'Discount',{min:1,integer:true}):null,payment_method,
     cash_received:payment_method==='cash'?new Decimal(cash_received).toFixed(2):null,
-    expected_total:req.body.expected_total===undefined?null:new Decimal(number(req.body.expected_total,'Expected total')).toFixed(2)
+    expected_total:req.body.expected_total===undefined?null:new Decimal(number(req.body.expected_total,'Expected total')).toFixed(2),
+    ...(hasOrderDetails(req.body) ? { order_details: details } : {})
   })).digest('hex'):null;
   const connection = await pool.connect();
 
@@ -227,10 +230,10 @@ const createOrder = asyncHandler(async (req, res) => {
 
     const orderResult = await connection.query(
       `INSERT INTO orders (order_number, user_id, subtotal, discount_id, discount_amount, total,
-         payment_method, cash_received, change_amount, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'completed') RETURNING id`,
+         payment_method, cash_received, change_amount, status, order_type, customer_name, seating_reference, order_notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'completed', $10, $11, $12, $13) RETURNING id`,
       [orderNumber, req.user.id, subtotal, discountRow?.id || null, discountAmount, total,
-        payment_method, cashReceivedValue, changeAmount]
+        payment_method, cashReceivedValue, changeAmount, details.order_type, details.customer_name, details.seating_reference, details.order_notes]
     );
     const orderId = orderResult.rows[0].id;
 
@@ -278,6 +281,7 @@ const createOrder = asyncHandler(async (req, res) => {
     }
 
     const response={
+      ...details,
       id: orderId,
       order_number: orderNumber,
       created_at: new Date().toISOString(),
@@ -302,7 +306,11 @@ const createOrder = asyncHandler(async (req, res) => {
 
 // GET /api/orders?from=&to=&search=&cashier_id=&status=&limit=
 const getOrders = asyncHandler(async (req, res) => {
-  const { from, to, search, cashier_id, status, limit } = req.query;
+  const { from, to, search, cashier_id, status, limit, order_type, payment_method } = req.query;
+  if (order_type && !['dine_in', 'takeout', 'unspecified'].includes(order_type)) throw new ApiError(400, 'Invalid order type filter.');
+  if (status && !['completed', 'voided'].includes(status)) throw new ApiError(400, 'Invalid transaction status.');
+  if (payment_method && !['cash', 'gcash', 'other'].includes(payment_method)) throw new ApiError(400, 'Invalid payment method filter.');
+  if (from && to && timestamp(from) > timestamp(to)) throw new ApiError(400, 'Start date must not be after end date.');
   const conditions = [];
   const params = [];
 
@@ -312,12 +320,15 @@ const getOrders = asyncHandler(async (req, res) => {
     params.push(req.user.id);
   } else if (cashier_id) {
     conditions.push(`o.user_id = $${params.length + 1}`);
-    params.push(cashier_id);
+    params.push(number(cashier_id, 'Cashier', { min: 1, integer: true }));
   }
 
   if (from) { conditions.push(`o.created_at >= $${params.length + 1}`); params.push(timestamp(from)); }
   if (to) { conditions.push(`o.created_at <= $${params.length + 1}`); params.push(timestamp(to)); }
   if (status) { conditions.push(`o.status = $${params.length + 1}`); params.push(status); }
+  if (order_type === 'unspecified') conditions.push('o.order_type IS NULL');
+  else if (order_type) { conditions.push(`o.order_type = $${params.length + 1}`); params.push(order_type); }
+  if (payment_method) { conditions.push(`o.payment_method = $${params.length + 1}`); params.push(payment_method); }
   if (search) {
     conditions.push(`(o.order_number COLLATE "C" ILIKE $${params.length + 1} OR EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id AND unaccent(oi.product_name COLLATE "C") ILIKE unaccent($${params.length + 2}::text)))`);
     params.push(`%${search}%`, `%${search}%`);

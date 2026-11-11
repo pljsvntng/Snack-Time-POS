@@ -1,6 +1,8 @@
+import DialogSurface from '../components/DialogSurface';
+import PageHeader from '../components/PageHeader';
 import TableScroll from '../components/TableScroll';
 import { useEffect, useState } from 'react';
-import { Plus, SlidersHorizontal, X } from 'lucide-react';
+import { Plus, SlidersHorizontal, X, Search, Boxes, AlertTriangle } from 'lucide-react';
 import { api } from '../services/api';
 import { formatDateTime } from '../utils/currency';
 import Toast from '../components/Toast';
@@ -15,14 +17,19 @@ export default function Inventory() {
   const [adjustForm, setAdjustForm] = useState({ type: 'add', quantity: '', reason: '' });
   const [toast, setToast] = useState(null);
   const [tab, setTab] = useState('stock');
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
 
   const load = async () => {
+    setLoading(true);
     try {
       const [ing, tx] = await Promise.all([api.get('/inventory'), api.get('/inventory/transactions')]);
       setIngredients(ing);
       setTransactions(tx);
     } catch (err) {
       setToast({ type: 'error', message: err.message });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -59,18 +66,28 @@ export default function Inventory() {
     }
   };
 
+  const visibleIngredients = ingredients.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+  const restockCount = ingredients.filter(i => ['low_stock', 'out_of_stock'].includes(i.status)).length;
+
   return (
     <div>
-      <div className="page-header">
-        <h2>Inventory</h2>
+      <PageHeader title="Inventory" description="Keep the counter stocked. Track ingredients and every stock movement.">
         <button className="btn btn-primary" onClick={() => setShowAddForm(true)}><Plus size={16} /> Add Ingredient</button>
-      </div>
+      </PageHeader>
 
       <div className="category-tabs">
         <button className={`category-tab ${tab === 'stock' ? 'active' : ''}`} onClick={() => setTab('stock')}>Current Stock</button>
         <button className={`category-tab ${tab === 'history' ? 'active' : ''}`} onClick={() => setTab('history')}>Transaction History</button>
         <button className={`category-tab ${tab === 'sync' ? 'active' : ''}`} onClick={() => setTab('sync')}>Offline reconciliation</button>
       </div>
+
+      {tab === 'stock' && <>
+        <div className="inventory-overview">
+          <span><Boxes size={17} /><b>{ingredients.length}</b> ingredients tracked</span>
+          <span className={restockCount ? 'needs-attention' : ''}><AlertTriangle size={17} /><b>{restockCount}</b> need restocking</span>
+        </div>
+        <div className="filter-row"><div className="search-field"><Search size={16} /><input aria-label="Search ingredients" placeholder="Find an ingredient…" value={search} onChange={e => setSearch(e.target.value)} /></div></div>
+      </>}
 
       {tab === 'sync' ? <OfflineReconciliation /> : tab === 'stock' ? (
         <div className="card">
@@ -80,7 +97,7 @@ export default function Inventory() {
                 <tr><th>Ingredient</th><th className="num">Current Stock</th><th className="num">Min Stock</th><th>Status</th><th>Actions</th></tr>
               </thead>
               <tbody>
-                {ingredients.map((ing) => (
+                {loading ? <tr><td colSpan={5} className="table-empty">Loading stock…</td></tr> : visibleIngredients.length === 0 ? <tr><td colSpan={5} className="table-empty">No ingredients found.</td></tr> : visibleIngredients.map((ing) => (
                   <tr key={ing.id}>
                     <td><b>{ing.name}</b></td>
                     <td className="num">{Number(ing.current_stock).toLocaleString()} {ing.unit}</td>
@@ -103,6 +120,7 @@ export default function Inventory() {
                 <tr><th>Date</th><th>Ingredient</th><th>Type</th><th className="num">Qty</th><th className="num">Resulting Stock</th><th>Reason</th><th>By</th></tr>
               </thead>
               <tbody>
+                {!loading && transactions.length === 0 && <tr><td colSpan={7} className="table-empty">Stock movements will appear here.</td></tr>}
                 {transactions.map((t) => (
                   <tr key={t.id}>
                     <td>{formatDateTime(t.created_at)}</td>
@@ -122,7 +140,7 @@ export default function Inventory() {
 
       {showAddForm && (
         <div className="modal-overlay" onClick={() => setShowAddForm(false)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+          <DialogSurface label="Add Ingredient" onClose={() => setShowAddForm(false)} className="">
             <button className="modal-close" aria-label="Close" onClick={() => setShowAddForm(false)}><X size={18} /></button>
             <div className="modal-body">
               <div className="modal-title">Add Ingredient</div>
@@ -149,13 +167,13 @@ export default function Inventory() {
                 </div>
               </form>
             </div>
-          </div>
+          </DialogSurface>
         </div>
       )}
 
       {adjustTarget && (
         <div className="modal-overlay" onClick={() => setAdjustTarget(null)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+          <DialogSurface label="Adjust Stock" onClose={() => setAdjustTarget(null)} className="">
             <button className="modal-close" aria-label="Close" onClick={() => setAdjustTarget(null)}><X size={18} /></button>
             <div className="modal-body">
               <div className="modal-title">Adjust Stock — {adjustTarget.name}</div>
@@ -185,7 +203,7 @@ export default function Inventory() {
                 </div>
               </form>
             </div>
-          </div>
+          </DialogSurface>
         </div>
       )}
 

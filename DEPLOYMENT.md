@@ -1,5 +1,17 @@
 # Render Free + Neon Free deployment
 
+## November 11, 2026 update
+
+The existing `snack-time-pos` Render service (`srv-dbiv84g473hc73ao5cqg`) still serves both the web interface and `/api` from `codex/offline-render-neon`. Automatic deployment remains off. Its live health response and the current private configuration identify **`snacktime-pos-demo`**, project `bitter-salad-90425468`, branch `main` (`br-winter-mouse-be8e5xwq`), database `neondb`, as the active database. The original `snacktime-pos` Neon project remains separate; do not switch database targets based on the older deployment history below.
+
+This release includes the storefront login, shared POS/admin redesign, compact order panel, and Dine-In/Takeout details, receipts, filters and reporting. The incremental `database/order-details.postgresql.sql` migration adds four nullable columns and two checks. Historical orders remain unspecified, with their original amounts intact. Startup uses the existing `ensureSyncSchema` migration transaction.
+
+The pre-release recovery branch is `pre-ui-release-20261111` (`br-soft-sunset-be7a3ba5`), with no compute endpoint. Its child `ui-release-qa-20261111` (`br-holy-voice-bee451uz`) is reserved for migration and transaction acceptance, never application traffic. A custom-format backup was restored to an isolated local database and compared across all records, numeric totals, columns, constraints and indexes; the untouched QA clone matched it. Private backup and verification evidence is under ignored `database/backups/release-20261111/`.
+
+Use the existing Render build and start commands. `VITE_API_URL=/api` keeps the web UI on the same HTTPS origin. Preserve `DATABASE_URL`, `POS_DATABASE_ID`, `JWT_SECRET`, the pinned offline signing key and `CLIENT_ORIGIN=https://localhost`. No secret rotation, seeding or replacement database is needed. Deploy once after the verified commit is pushed, monitor its specific Render deploy ID, and check live health plus read-only browser acceptance. Actual transaction writes belong only on the QA branch.
+
+## Original deployment history (October 31)
+
 Status: deployed on Render Free at **https://snack-time-pos.onrender.com**, using Neon Free PostgreSQL 18. The API is **https://snack-time-pos.onrender.com/api**. The Android build configuration uses this verified actual HTTPS API. Automatic synchronization is not implemented yet; local Android sales remain on-device. The original MariaDB and local PostgreSQL records were not modified.
 
 The deployed source is the `codex/offline-render-neon` branch of `pljsvntng/Snack-Time-POS`. Automatic deployment is disabled. Render service `srv-dbiv84g473hc73ao5cqg` is in **My Workspace**, region Ohio, with compute plan **free**. Neon organization plan **free** was verified. No paid database, disk, worker or service was created. Render uses its default TCP service probe; `/api/health` has been checked directly over HTTPS.

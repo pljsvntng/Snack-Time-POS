@@ -1,14 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
-import { User, Lock, Eye, EyeOff, Tag, Package, BarChart3, LogIn, Loader2, AlertCircle } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, ArrowRight, ShieldCheck, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { BrandLockup } from '../components/Brand';
-
-const FEATURES = [
-  { icon: Tag, title: 'Fast, touch-friendly checkout', text: 'Get orders done in seconds.' },
-  { icon: Package, title: 'Inventory that updates with every sale', text: "Always know what's in stock." },
-  { icon: BarChart3, title: 'Daily, weekly and monthly sales reports', text: 'Track your business growth.' },
-];
+import useMediaQuery from '../hooks/useMediaQuery';
+import './Login.css';
 
 export default function Login() {
   const { user, login, loading, initializing, android, offline, offlineStatus, switchMode, storageError, retryInitialization, error: sessionError } = useAuth();
@@ -17,6 +13,10 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const submittingRef = useRef(false);
+  const errorRef = useRef(null);
+  const compact = useMediaQuery('(max-width: 767px)');
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
 
   if (initializing) return <div className="empty-state" role="status">Opening secure local storage...</div>;
   if (android&&storageError) return <div className="empty-state native-storage-error"><BrandLockup/><h2>Secure storage needs attention</h2><p role="alert">{storageError}</p><p>Keep the app data intact to preserve saved receipts. Do not uninstall or clear storage.</p><button className="btn btn-primary" onClick={retryInitialization}>Retry secure storage</button></div>;
@@ -24,73 +24,32 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading || submittingRef.current) return;
+    submittingRef.current = true;
     setError('');
     try {
       const loggedInUser = await login(username, password);
       navigate(loggedInUser.role === 'admin' ? '/dashboard' : '/pos');
     } catch (err) {
       setError(err.message);
+    } finally {
+      submittingRef.current = false;
     }
   };
 
   return (
-    <div className="login-page">
-      {/* ---------- Left: promotional panel ---------- */}
-      <section className="login-hero" aria-label="About Snack Time POS">
-        <span className="hero-arc" aria-hidden="true" />
-
-        <div className="hero-content">
-          <BrandLockup inverted size={72} />
-
-          <p className="hero-headline">
-            <span>Simple point of</span>
-            <span>sale for small food</span>
-            <span className="hl">businesses.</span>
-          </p>
-          <p className="hero-desc">
-            Take orders quickly, keep stock in check, and see how your day is going.
-          </p>
-
-          <ul className="hero-features">
-            {FEATURES.map(({ icon: Icon, title, text }) => (
-              <li key={title}>
-                <span className="feature-tile"><Icon size={22} /></span>
-                <span className="feature-copy">
-                  <b>{title}</b>
-                  <small>{text}</small>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <svg className="hero-sparkle" viewBox="0 0 48 48" aria-hidden="true">
-          <path d="M14 8 L8 22" /><path d="M30 24 L42 22" />
-        </svg>
-        <svg className="hero-wave" viewBox="0 0 900 180" preserveAspectRatio="none" aria-hidden="true">
-          <path className="wave-line" d="M0 74 C 90 38, 190 40, 300 92" />
-          <path className="wave-fill" d="M0 60 C 110 26, 230 40, 350 110 C 440 160, 540 180, 640 180 L0 180 Z" />
-        </svg>
-        <img
-          className="hero-photo"
-          src="/images/login/hero-food.png"
-          alt=""
-          aria-hidden="true"
-          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-        />
+    <main className="login-page">
+      <section className="login-hero" aria-label="Welcome to Snack Time">
+        <figure className="store-photo">
+          <img src="/images/login/snack-time-storefront.png" alt="Snack Time storefront with its red exterior, food sign, wooden counter and open gates" fetchpriority="high" decoding="async" />
+          <figcaption><span className="store-welcome-accent" aria-hidden="true" /><h2>WELCOME TO SNACK TIME</h2><p>Serving happiness, one snack at a time.</p></figcaption>
+        </figure>
       </section>
-
-      {/* ---------- Right: sign-in ---------- */}
-      <section className="login-form-panel">
-        <div className="login-tagline" aria-hidden="true">
-          <svg viewBox="0 0 28 40"><path d="M4 8 L20 14" /><path d="M2 26 L16 20" /></svg>
-          <span>Good Food<br />Better Days</span>
-          <svg className="swoosh" viewBox="0 0 120 20"><path d="M2 16 C 40 12, 80 8, 118 2" /></svg>
-        </div>
-
+      <section className="login-form-panel" aria-labelledby="login-heading">
         <div className="login-form-inner">
-          <h1 className="login-form-heading">Welcome back</h1>
-          <p className="login-form-sub">{offline ? 'Sign in to the cash POS saved on this device.' : 'Sign in to open the register.'}</p>
+          <div className="login-brand"><BrandLockup size={36} /></div>
+          <h1 id="login-heading" className="login-form-heading">Welcome Back!</h1>
+          <p className="login-form-sub">{offline ? 'Sign in to the cash POS saved on this device.' : 'Sign in to your Snack Time account to get started.'}</p>
 
           {android && <div className="offline-access">
             <div className="mode-picker" aria-label="POS connection mode">
@@ -101,24 +60,28 @@ export default function Login() {
             {sessionError && <div role="alert">{sessionError}</div>}
           </div>}
           {error && (
-            <div className="login-error" role="alert">
+            <div id="login-error" ref={errorRef} className="login-error" role="alert" tabIndex={-1}>
               <AlertCircle size={16} /> {error}
             </div>
           )}
 
-          <form className="login-form" onSubmit={handleSubmit}>
+          <form className="login-form" onSubmit={handleSubmit} aria-busy={loading}>
             <div>
-              <label htmlFor="username">Username or email</label>
+              <label htmlFor="username">Username or Email Address</label>
               <div className="input-icon">
                 <User size={18} />
                 <input
                   id="username"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="e.g. juan"
+                  onChange={(e) => { setUsername(e.target.value); if (error) setError(''); }}
+                  placeholder="Enter your username or email"
                   autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  readOnly={loading}
                   aria-invalid={error ? 'true' : undefined}
-                  autoFocus
+                  aria-describedby={error ? 'login-error' : undefined}
+                  autoFocus={!android && !compact}
                   required
                 />
               </div>
@@ -131,39 +94,37 @@ export default function Login() {
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => { setPassword(e.target.value); if (error) setError(''); }}
                   placeholder="Enter your password"
                   autoComplete="current-password"
+                  readOnly={loading}
                   aria-invalid={error ? 'true' : undefined}
+                  aria-describedby={error ? 'login-error' : undefined}
                   required
                 />
                 <button
                   type="button"
+                  disabled={loading}
                   className="password-toggle"
                   onClick={() => setShowPassword((s) => !s)}
-                  tabIndex={-1}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   aria-pressed={showPassword}
                 >
-                  {showPassword ? <Eye size={20} /> : <EyeOff size={20} />}
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
             </div>
-            <button className="btn btn-primary btn-block login-submit" disabled={loading}>
+            <button type="submit" className="btn btn-primary btn-block login-submit" disabled={loading}>
               {loading
                 ? <><Loader2 size={20} className="spin" /> Signing in…</>
-                : <><LogIn size={20} /> Log in</>}
+                : <>SIGN IN <ArrowRight size={18} /></>}
             </button>
           </form>
-
+          <div className="login-security"><span aria-hidden="true"><ShieldCheck size={17} /></span><p>Secure POS Access</p></div>
         </div>
 
-        <svg className="login-blob" viewBox="0 0 280 280" aria-hidden="true">
-          <path className="blob" d="M280 78 C232 74 196 110 184 152 C172 196 120 208 78 232 C56 244 36 258 24 280 L280 280 Z" />
-          <path className="petal" d="M150 238 C132 226 130 204 146 192 C164 204 166 226 150 238 Z" />
-          <path className="petal" d="M182 252 C170 236 176 218 194 212 C204 228 200 246 182 252 Z" />
-        </svg>
+        <footer className="login-copyright">© {new Intl.DateTimeFormat('en', { year: 'numeric', timeZone: 'Asia/Manila' }).format(new Date())} Snack Time</footer>
       </section>
-    </div>
+    </main>
   );
 }

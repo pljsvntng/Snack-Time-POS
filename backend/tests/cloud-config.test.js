@@ -11,7 +11,9 @@ test('Neon URLs enforce certificate verification and safely decode credentials',
  }finally{if(saved)process.env.DATABASE_URL=saved;else delete process.env.DATABASE_URL;}
 });
 test('backup verification handles lossless pg_restore CHECK re-parsing while detecting changed constraints',()=>{
+ const identity=process.env.POS_DATABASE_ID,connection=process.env.DATABASE_URL;
  const {canonicalConstraint}=require('../scripts/migrate-neon');
+ assert.ok(process.env.POS_DATABASE_ID===identity&&process.env.DATABASE_URL===connection,'Importing verification helpers must preserve the active database environment');
  const original="CHECK (((type)::text = ANY ((ARRAY['cash'::character varying, 'other'::character varying])::text[])))";
  const restored="CHECK (((type)::text = ANY (ARRAY[('cash'::character varying)::text, ('other'::character varying)::text])))";
  assert.equal(canonicalConstraint(original),canonicalConstraint(restored));

@@ -1,6 +1,8 @@
+import DialogSurface from '../components/DialogSurface';
+import PageHeader from '../components/PageHeader';
 import TableScroll from '../components/TableScroll';
 import { useEffect, useState, useRef } from 'react';
-import { Plus, Pencil, ImagePlus, Eye, EyeOff, Trash2, UtensilsCrossed, X } from 'lucide-react';
+import { Search, Plus, Pencil, ImagePlus, Eye, EyeOff, Trash2, UtensilsCrossed, X } from 'lucide-react';
 import { api, imageUrl } from '../services/api';
 import { peso } from '../utils/currency';
 import Toast from '../components/Toast';
@@ -11,6 +13,7 @@ const emptyForm = { category_id: '', name: '', description: '', price: '', sku: 
 export default function Products() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -121,17 +124,17 @@ export default function Products() {
     }
   };
 
-  const visibleProducts = categoryFilter ? products.filter((p) => p.category_id === Number(categoryFilter)) : products;
+  const visibleProducts = products.filter(p => (!categoryFilter || p.category_id === Number(categoryFilter)) && [p.name, p.sku, p.category_name].some(value => value?.toLowerCase().includes(search.toLowerCase())));
 
   return (
     <div>
-      <div className="page-header">
-        <h2>Products</h2>
+      <PageHeader title="Products" description="Your menu, thoughtfully managed. Update prices, photos and availability.">
         <button className="btn btn-primary" onClick={openAddForm}><Plus size={16} /> Add Product</button>
-      </div>
+      </PageHeader>
 
       <div className="filter-row">
-        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+        <div className="search-field"><Search size={16} /><input aria-label="Search menu" placeholder="Search name, SKU or category…" value={search} onChange={e => setSearch(e.target.value)} /></div>
+        <select aria-label="Product category" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
           <option value="">All Categories</option>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
@@ -148,7 +151,7 @@ export default function Products() {
             <tbody>
               {loading ? (
                 <tr><td colSpan={7}>Loading...</td></tr>
-              ) : visibleProducts.map((p) => (
+              ) : visibleProducts.length === 0 ? <tr><td colSpan={7} className="table-empty">No products match your filters.</td></tr> : visibleProducts.map((p) => (
                 <tr key={p.id}>
                   <td>
                     <div className="thumb-box">
@@ -179,7 +182,7 @@ export default function Products() {
 
       {showForm && (
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <div className="modal-box wide" onClick={(e) => e.stopPropagation()}>
+          <DialogSurface label={editingId ? 'Edit Product' : 'Add Product'} onClose={() => setShowForm(false)} className="wide">
             <button className="modal-close" aria-label="Close" onClick={() => setShowForm(false)}><X size={18} /></button>
             <div className="modal-body">
               <div className="modal-title">{editingId ? 'Edit Product' : 'Add Product'}</div>
@@ -233,7 +236,7 @@ export default function Products() {
                 </div>
               </form>
             </div>
-          </div>
+          </DialogSurface>
         </div>
       )}
 

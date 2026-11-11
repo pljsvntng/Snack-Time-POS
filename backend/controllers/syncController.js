@@ -1,6 +1,7 @@
 const pool=require('../config/db'),crypto=require('node:crypto'),ApiError=require('../utils/ApiError'),asyncHandler=require('../utils/asyncHandler');
 const {readSnapshot}=require('./offlineController'),{verifyOfflineGrant}=require('../utils/syncAuthentication');
 const {uuid,cents,money,fingerprint,envelope,resolveCatalogSale,legacySale}=require('../utils/offlineSaleValidation');
+const {orderDetails}=require('../utils/orderDetails');
 async function transaction(fn){const c=await pool.connect();try{await c.query('BEGIN');await c.query("SET LOCAL lock_timeout='10s'");const result=await fn(c);await c.query('COMMIT');return result;}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}}
 const catalog=asyncHandler(async(req,res)=>{
  const device=req.body.device_id;if(!uuid(device)||req.syncDevice&&req.syncDevice!==device)throw new ApiError(400,'Invalid catalog device.');
@@ -43,10 +44,11 @@ async function stock(c,saleId,orderId,userId,needs){
 }
 async function persist(c,row,resolved){
  const r=row.payload.receipt;
+ const details=orderDetails(r);
  for(const line of resolved.lines)if(!(await c.query('SELECT 1 FROM products WHERE id=$1',[line.product_id])).rowCount)throw new ApiError(409,'A historical product is missing. Restore its record before approving this sale.');
  const discountId=resolved.discountId&&(await c.query('SELECT 1 FROM discounts WHERE id=$1',[resolved.discountId])).rowCount?resolved.discountId:null;
  const orderNumber=await require('../utils/orderNumber').generateOrderNumber(c);
- const {rows:[order]}=await c.query("INSERT INTO orders(order_number,user_id,subtotal,discount_id,discount_amount,total,payment_method,cash_received,change_amount,status,created_at) VALUES($1,$2,$3,$4,$5,$6,'cash',$7,$8,'completed',$9) RETURNING id",[orderNumber,row.user_id,money(cents(r.subtotal)),discountId,money(cents(r.discount_amount)),money(cents(r.total)),money(cents(r.cash_received)),money(cents(r.change_amount)),r.created_at]);
+ const {rows:[order]}=await c.query("INSERT INTO orders(order_number,user_id,subtotal,discount_id,discount_amount,total,payment_method,cash_received,change_amount,status,created_at,order_type,customer_name,seating_reference,order_notes) VALUES($1,$2,$3,$4,$5,$6,'cash',$7,$8,'completed',$9,$10,$11,$12,$13) RETURNING id",[orderNumber,row.user_id,money(cents(r.subtotal)),discountId,money(cents(r.discount_amount)),money(cents(r.total)),money(cents(r.cash_received)),money(cents(r.change_amount)),r.created_at,details.order_type,details.customer_name,details.seating_reference,details.order_notes]);
  for(const line of resolved.lines){
   const {rows:[item]}=await c.query('INSERT INTO order_items(order_id,product_id,product_name,unit_price,quantity,subtotal) VALUES($1,$2,$3,$4,$5,$6) RETURNING id',[order.id,line.product_id,line.product_name,line.unit_price,line.quantity,line.subtotal]);
   for(const o of line.options)await c.query('INSERT INTO order_item_options(order_item_id,option_group_name,option_name,price_modifier) VALUES($1,$2,$3,$4)',[item.id,o.option_group_name,o.option_name,o.price_modifier]);

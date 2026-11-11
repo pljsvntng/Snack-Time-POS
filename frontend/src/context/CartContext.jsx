@@ -4,6 +4,7 @@ import { availability, optionAvailable, findStockIssues, lineIssue as findLineIs
 import { unitAmount, lineAmount, cartAmounts } from '../utils/money';
 import { getOfflineStore } from '../offline/runtime';
 import { useAuth } from './AuthContext';
+import { EMPTY_ORDER_DETAILS } from '../utils/orderDetails';
 const CartContext = createContext(null);
 
 let nextCartItemId = 1;
@@ -22,6 +23,16 @@ export function CartProvider({ children }) {
   const { user, offline } = useAuth();
   const checkoutIdRef = useRef(crypto.randomUUID());
   const discountRef = useRef(null);
+  const [orderDetails, setOrderDetailsState] = useState(EMPTY_ORDER_DETAILS);
+  const orderDetailsRef = useRef(EMPTY_ORDER_DETAILS);
+  const setOrderDetails = useCallback(patch => {
+    const next = { ...orderDetailsRef.current, ...patch };
+    if (next.orderType !== 'dine_in') next.seatingReference = '';
+    if (Object.keys(EMPTY_ORDER_DETAILS).every(key => next[key] === orderDetailsRef.current[key])) return;
+    checkoutIdRef.current = crypto.randomUUID();
+    orderDetailsRef.current = next;
+    setOrderDetailsState(next);
+  }, []);
   const [hydratedUser, setHydratedUser] = useState(null);
   const [persistenceError, setPersistenceError] = useState(null);
   const [items, setItemsState] = useState([]);
@@ -97,7 +108,8 @@ export function CartProvider({ children }) {
   const clearCart = useCallback(() => {
     commit([]);
     setDiscount(null);
-  }, [commit]);
+    setOrderDetails(EMPTY_ORDER_DETAILS);
+  }, [commit, setOrderDetails]);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,6 +118,9 @@ export function CartProvider({ children }) {
       if (cancelled) return;
       if (saved) {
         commit(saved.items); setDiscount(saved.discount || null); checkoutIdRef.current = saved.request_id;
+        const details = { ...EMPTY_ORDER_DETAILS, ...saved.orderDetails };
+        if (details.orderType !== 'dine_in') details.seatingReference = '';
+        orderDetailsRef.current = details; setOrderDetailsState(details);
         nextCartItemId = Math.max(nextCartItemId, ...saved.items.map(item => item.cartItemId + 1));
       }
       setHydratedUser(user.id);
@@ -117,13 +132,13 @@ export function CartProvider({ children }) {
     if (!offline) return;
     if (hydratedUser !== user?.id) throw new Error('The saved cart is still opening.');
     const store = await getOfflineStore();
-    await store.draft({ items: itemsRef.current, discount: discountRef.current, request_id: checkoutIdRef.current }, user.id);
+    await store.draft({ items: itemsRef.current, discount: discountRef.current, orderDetails: orderDetailsRef.current, request_id: checkoutIdRef.current }, user.id);
     window.dispatchEvent(new Event('pos:cartpersisted'));
     setPersistenceError(null);
   }, [offline, hydratedUser, user?.id]);
   useEffect(() => {
     if (offline && user && hydratedUser === user.id) flushDraft().catch(err => setPersistenceError(err.message));
-  }, [items, discount, offline, user?.id, hydratedUser, flushDraft]);
+  }, [items, discount, orderDetails, offline, user?.id, hydratedUser, flushDraft]);
 
   const { subtotal, discountAmount, total } = useMemo(() => cartAmounts(items, discount), [items, discount]);
 
@@ -140,6 +155,7 @@ export function CartProvider({ children }) {
     items, addItem, updateQuantity, removeItem, updateItemOptions, clearCart,
     flushDraft, checkoutId: () => checkoutIdRef.current, persistenceError, restoringDraft: offline && hydratedUser !== user?.id,
     discount, setDiscount, subtotal, discountAmount, total,
+    orderDetails, setOrderDetails,
     catalog, setCatalog, getAvailability, isOptionAvailable, stockIssues, lineIssue,
   };
 

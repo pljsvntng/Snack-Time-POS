@@ -2,7 +2,8 @@
 // and an EMPTY Neon database. No --clean, DROP SCHEMA or source writes.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {spawn}=require('node:child_process');
-require('dotenv').config({path:path.join(__dirname,'../.env.neon')});
+// Importing read-only fingerprint helpers must not switch the caller's database identity.
+if(require.main===module)require('dotenv').config({path:path.join(__dirname,'../.env.neon')});
 const {Pool,options}=require('../config/postgresql');
 const quote=s=>'"'+s.replaceAll('"','""')+'"';
 const digest=value=>crypto.createHash('sha256').update(value).digest('hex');

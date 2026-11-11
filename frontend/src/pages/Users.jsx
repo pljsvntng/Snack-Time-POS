@@ -1,9 +1,12 @@
+import DialogSurface from '../components/DialogSurface';
+import PageHeader from '../components/PageHeader';
 import TableScroll from '../components/TableScroll';
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, UserX, UserCheck, X } from 'lucide-react';
+import { Plus, Pencil, UserX, UserCheck, X, Search } from 'lucide-react';
 import { api } from '../services/api';
 import { formatDateTime } from '../utils/currency';
 import Toast from '../components/Toast';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const emptyForm = { full_name: '', username: '', email: '', password: '', role: 'cashier' };
 
@@ -13,8 +16,11 @@ export default function Users() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [toast, setToast] = useState(null);
+  const [disableTarget, setDisableTarget] = useState(null);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const load = () => api.get('/users').then(setUsers).catch((e) => setToast({ type: 'error', message: e.message }));
+  const load = () => { setLoading(true); return api.get('/users').then(setUsers).catch((e) => setToast({ type: 'error', message: e.message })).finally(() => setLoading(false)); };
 
   useEffect(() => { load(); }, []);
 
@@ -50,19 +56,22 @@ export default function Users() {
     }
   };
 
+  const visibleUsers = users.filter(u => [u.full_name, u.username, u.email].some(value => value?.toLowerCase().includes(search.toLowerCase())));
+
   return (
     <div>
-      <div className="page-header">
-        <h2>Users</h2>
+      <PageHeader title="Your team" description="Manage the people behind the counter and their access.">
         <button className="btn btn-primary" onClick={openAdd}><Plus size={16} /> Add User</button>
-      </div>
+      </PageHeader>
+
+      <div className="filter-row"><div className="search-field"><Search size={16} /><input aria-label="Search team" placeholder="Search name, username or email…" value={search} onChange={e => setSearch(e.target.value)} /></div><span className="filter-count">{users.length} team members</span></div>
 
       <div className="card">
         <TableScroll>
           <table className="data-table">
             <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
             <tbody>
-              {users.map((u) => (
+              {loading ? <tr><td colSpan={7} className="table-empty">Loading your team…</td></tr> : visibleUsers.length === 0 ? <tr><td colSpan={7} className="table-empty">No team members found.</td></tr> : visibleUsers.map((u) => (
                 <tr key={u.id}>
                   <td><b>{u.full_name}</b></td>
                   <td>{u.username}</td>
@@ -73,7 +82,7 @@ export default function Users() {
                   <td>
                     <div className="table-actions">
                       <button className="btn btn-outline btn-sm" onClick={() => openEdit(u)}><Pencil size={14} /> Edit</button>
-                      <button className="btn btn-outline btn-sm" onClick={() => toggleActive(u)}>
+                      <button className={`btn ${u.active ? 'btn-danger-outline' : 'btn-outline'} btn-sm`} onClick={() => u.active ? setDisableTarget(u) : toggleActive(u)}>
                         {u.active ? <><UserX size={14} /> Disable</> : <><UserCheck size={14} /> Enable</>}
                       </button>
                     </div>
@@ -87,7 +96,7 @@ export default function Users() {
 
       {showForm && (
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+          <DialogSurface label={editingId ? 'Edit User' : 'Add User'} onClose={() => setShowForm(false)} className="">
             <button className="modal-close" aria-label="Close" onClick={() => setShowForm(false)}><X size={18} /></button>
             <div className="modal-body">
               <div className="modal-title">{editingId ? 'Edit User' : 'Add User'}</div>
@@ -122,11 +131,12 @@ export default function Users() {
                 </div>
               </form>
             </div>
-          </div>
+          </DialogSurface>
         </div>
       )}
 
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
+      <ConfirmDialog open={Boolean(disableTarget)} title={`Disable ${disableTarget?.full_name}?`} message="This team member will lose access to the register. Their past sales remain in transaction history." confirmLabel="Disable user" danger onCancel={() => setDisableTarget(null)} onConfirm={() => { toggleActive(disableTarget); setDisableTarget(null); }} />
     </div>
   );
 }

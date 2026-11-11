@@ -10,6 +10,8 @@
     "test": "node --test tests/*.test.cjs",
     "test:browser": "node tests/browser-smoke.cjs",
     "test:responsive": "node tests/responsive-smoke.cjs",
+    "test:redesign": "node tests/redesign-browser.cjs",
+    "test:redesign:offline": "node tests/redesign-browser.cjs --offline-only",
     "test:offline": "node --test tests/offline.test.cjs",
     "android:prepare": "node scripts/build-android.cjs",
     "android:open": "cap open android",

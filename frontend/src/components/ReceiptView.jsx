@@ -1,5 +1,7 @@
 import { peso, formatDateTime } from '../utils/currency';
 import {syncLabel} from '../utils/syncLabel';
+import { BrandMark } from './Brand.jsx';
+import { orderTypeLabel } from '../utils/orderDetails.js';
 
 export default function ReceiptView({ order, settings, cashierName }) {
   if (!order) return null;
@@ -10,12 +12,17 @@ export default function ReceiptView({ order, settings, cashierName }) {
   return (
     <div className="receipt">
       <div className="receipt-center">
+        <div className="receipt-brand"><BrandMark size={40} monochrome /></div>
         <strong>{businessName}</strong><br />
         {order.offline ? 'LOCAL CASH RECEIPT' : 'SALES RECEIPT'}
       </div>
       <hr />
       {syncLabel(order) && <div className="receipt-center">{syncLabel(order)}</div>}
       <div>Order #: {order.order_number}</div>
+      <div className="receipt-order-type">Order Type: {orderTypeLabel(order.order_type).toUpperCase()}</div>
+      {order.customer_name && <div>Customer: {order.customer_name}</div>}
+      {order.order_type === 'dine_in' && order.seating_reference && <div>Seating: {order.seating_reference}</div>}
+      {order.order_notes && <div className="receipt-notes">Notes: {order.order_notes}</div>}
       <div>Date: {formatDateTime(order.created_at || new Date())}</div>
       <div>Cashier: {cashierName || order.cashier_name || '-'}</div>
       <hr />

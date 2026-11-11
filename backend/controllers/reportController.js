@@ -6,8 +6,14 @@ const { number } = require('../utils/validation');
 // GET /api/reports/dashboard -- summary numbers + recent activity for the admin dashboard
 const getDashboard = asyncHandler(async (req, res) => {
   const { rows: [todaySummary] } = await pool.query(
-    `SELECT COALESCE(SUM(total),0) AS sales, COUNT(*) AS transactions
-     FROM orders WHERE DATE(created_at) = CURRENT_DATE AND status = 'completed'`
+    `SELECT COALESCE(SUM(total),0) AS sales, COUNT(*) AS transactions,
+       COUNT(*) FILTER (WHERE order_type = 'dine_in') AS dine_in_orders,
+       COALESCE(SUM(total) FILTER (WHERE order_type = 'dine_in'),0) AS dine_in_revenue,
+       COUNT(*) FILTER (WHERE order_type = 'takeout') AS takeout_orders,
+       COALESCE(SUM(total) FILTER (WHERE order_type = 'takeout'),0) AS takeout_revenue,
+       COUNT(*) FILTER (WHERE order_type IS NULL) AS unspecified_orders,
+       COALESCE(SUM(total) FILTER (WHERE order_type IS NULL),0) AS unspecified_revenue
+     FROM orders WHERE created_at >= CURRENT_DATE AND created_at < CURRENT_DATE + INTERVAL '1 day' AND status = 'completed'`
   );
 
   const { rows: [itemsSold] } = await pool.query(
@@ -23,17 +29,28 @@ const getDashboard = asyncHandler(async (req, res) => {
   const { rows: [lowStockIngredients] } = await pool.query(
     `SELECT COUNT(*) AS count FROM ingredients WHERE current_stock <= min_stock`
   );
+  const { rows: [productCount] } = await pool.query('SELECT COUNT(*) AS count FROM products WHERE deleted_at IS NULL');
+  const orderTypesToday = ['dine_in', 'takeout', 'unspecified'].map(type => {
+    const orders = Number(todaySummary[`${type}_orders`]);
+    return { order_type: type, orders, revenue: todaySummary[`${type}_revenue`], percentage: Number(todaySummary.transactions) ? orders / Number(todaySummary.transactions) * 100 : 0 };
+  });
 
   const { rows: recentTransactions } = await pool.query(
-    `SELECT o.id, o.order_number, o.created_at, o.total, o.payment_method, o.status, u.full_name AS cashier_name
+    `SELECT o.id, o.order_number, o.created_at, o.total, o.payment_method, o.status, o.order_type, u.full_name AS cashier_name
      FROM orders o JOIN users u ON o.user_id = u.id
      ORDER BY o.created_at DESC LIMIT 10`
   );
 
   const { rows: dailySales } = await pool.query(
     `SELECT DATE(created_at) AS day, COALESCE(SUM(total),0) AS sales
-     FROM orders WHERE status = 'completed' AND created_at >= (CURRENT_DATE - INTERVAL '6 days')
+     FROM orders WHERE status = 'completed' AND created_at >= (CURRENT_DATE - INTERVAL '29 days') AND created_at < CURRENT_DATE + INTERVAL '1 day'
      GROUP BY DATE(created_at) ORDER BY day ASC`
+  );
+  const { rows: monthlySales } = await pool.query(
+    `SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM-01') AS day, COALESCE(SUM(total),0) AS sales
+     FROM orders WHERE status = 'completed' AND created_at >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '5 months'
+       AND created_at < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
+     GROUP BY DATE_TRUNC('month', created_at) ORDER BY day`
   );
 
   const { rows: bestSellers } = await pool.query(
@@ -66,8 +83,12 @@ const getDashboard = asyncHandler(async (req, res) => {
     average_transaction: todaySummary.transactions > 0 ? todaySummary.sales / todaySummary.transactions : 0,
     low_stock_products: lowStockProducts.count,
     low_stock_ingredients: lowStockIngredients.count,
+    total_products: productCount.count,
+    order_types_today: orderTypesToday,
     recent_transactions: recentTransactions,
-    daily_sales_last_7_days: dailySales,
+    daily_sales_last_7_days: dailySales.filter(row => row.day >= addDays(today(), -6)),
+    daily_sales_last_30_days: dailySales,
+    monthly_sales_last_6_months: monthlySales,
     best_sellers_last_30_days: bestSellers,
     sales_by_category_last_30_days: salesByCategory,
     payment_breakdown_today: paymentBreakdown,

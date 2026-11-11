@@ -1,4 +1,5 @@
 import { schema } from './schema.js';
+import { normalizeOrderDetails, hasOrderDetails } from '../utils/orderDetails.js';
 import {SyncStore} from './sync-store.js';
 import { bytes64, verifier, equal, hash, verifyGrant, scaled, integer, safe, offlineError } from './security.js';
 
@@ -94,17 +95,35 @@ export class OfflineStore extends SyncStore {
   });
   return saved;
  }); }
- async listOrders({from,to,search='',localOnly=false}={}) { return this.exclusive(async()=>{const user=await this.actor();const local=(await this.db.query('SELECT receipt_json FROM local_orders WHERE user_id=? ORDER BY created_at DESC',[user.id])).map(r=>JSON.parse(r.receipt_json));const cached=localOnly?[]:(await this.db.query('SELECT data_json FROM cached_orders WHERE user_id=?',[user.id])).map(r=>JSON.parse(r.data_json));const date=v=>new Date(v?.includes(' ')?v.replace(' ','T')+'+08:00':v).getTime();return (await this.decorateOrders([...local,...cached.filter(o=>!local.some(l=>l.id==='local:'+o.offline_client_id))])).filter(o=>(!from||date(o.created_at)>=date(from))&&(!to||date(o.created_at)<=date(to))&&JSON.stringify([o.order_number,...o.items.map(i=>i.product_name||i.name)]).toLowerCase().includes(search.toLowerCase())).sort((a,b)=>date(b.created_at)-date(a.created_at));}); }
+ async listOrders({from,to,search='',localOnly=false,order_type='',status='',payment_method=''}={}) {
+  return this.exclusive(async()=>{
+   const user=await this.actor();
+   if(order_type&&!['dine_in','takeout','unspecified'].includes(order_type))throw offlineError('Invalid order type filter.');
+   if(status&&!['completed','voided'].includes(status))throw offlineError('Invalid transaction status.');
+   if(payment_method&&!['cash','gcash','other'].includes(payment_method))throw offlineError('Invalid payment method filter.');
+   const local=(await this.db.query('SELECT receipt_json FROM local_orders WHERE user_id=? ORDER BY created_at DESC',[user.id])).map(r=>JSON.parse(r.receipt_json));
+   const cached=localOnly?[]:(await this.db.query('SELECT data_json FROM cached_orders WHERE user_id=?',[user.id])).map(r=>JSON.parse(r.data_json));
+   const date=value=>new Date(value?.includes(' ')?value.replace(' ','T')+'+08:00':value).getTime();
+   return (await this.decorateOrders([...local,...cached.filter(o=>!local.some(l=>l.id==='local:'+o.offline_client_id))]))
+    .filter(o=>(!from||date(o.created_at)>=date(from))&&(!to||date(o.created_at)<=date(to))
+     &&(!order_type||(order_type==='unspecified'?!o.order_type:o.order_type===order_type))
+     &&(!status||o.status===status)&&(!payment_method||o.payment_method===payment_method)
+     &&JSON.stringify([o.order_number,...(o.items||[]).map(i=>i.product_name||i.name)]).toLowerCase().includes(search.toLowerCase()))
+    .sort((a,b)=>date(b.created_at)-date(a.created_at));
+  });
+ }
  async order(id) { return this.exclusive(async()=>{const user=await this.actor();const row=id.startsWith('server:')?(await this.db.query('SELECT data_json AS receipt_json FROM cached_orders WHERE id=? AND user_id=?',[id,user.id]))[0]:(await this.db.query('SELECT receipt_json FROM local_orders WHERE id=? AND user_id=?',[id,user.id]))[0];if(!row)throw offlineError('Local transaction not found.',404);return (await this.decorateOrders([JSON.parse(row.receipt_json)]))[0];}); }
  async checkout(request) {
   return this.exclusive(async()=>{
    const user=await this.actor();
+   let details;
+   try { details=normalizeOrderDetails(request); } catch(error) { throw offlineError(error.message); }
    if(request.payment_method!=='cash')throw offlineError('Only cash payments are available offline.');
    if(typeof request.request_id!=='string'||!/^[a-f0-9-]{36}$/i.test(request.request_id))throw offlineError('A durable checkout identifier is required.');
    if(!Array.isArray(request.items)||!request.items.length||request.items.length>200)throw offlineError('Invalid order items.');
    const items=request.items.map(i=>{if(!i||typeof i!=='object')throw offlineError('Invalid order item.');const ids=i.selected_option_ids??[];if(!Array.isArray(ids))throw offlineError('Invalid options.');const selected=ids.map(n=>integer(n,'option')).sort((a,b)=>a-b);if(new Set(selected).size!==selected.length)throw offlineError('Duplicate option.');return {product_id:integer(i.product_id,'product'),quantity:integer(i.quantity,'quantity'),selected_option_ids:selected};});
    const cash=scaled(request.cash_received,'Cash received');if(cash>9999999999)throw offlineError('Cash exceeds the supported financial range.');const discountId=request.discount_id?integer(request.discount_id,'discount'):null;
-   const fingerprint=await hash(JSON.stringify({items,discountId,cash,user:user.id}));
+   const fingerprint=await hash(JSON.stringify({items,discountId,cash,user:user.id,...(hasOrderDetails(request)?{orderDetails:details}:{})}));
    return this.db.transaction(async()=>{
     const existing=(await this.db.query('SELECT * FROM local_orders WHERE request_id=?',[request.request_id]))[0];
     if(existing){if(existing.user_id!==user.id||existing.request_hash!==fingerprint)throw offlineError('Checkout identifier already belongs to a different sale.',409);return JSON.parse(existing.receipt_json);}
@@ -128,12 +147,12 @@ export class OfflineStore extends SyncStore {
     const total=subtotal-discount;if(request.expected_total!==undefined&&scaled(request.expected_total,'Expected total')!==total)throw offlineError('Prices changed. Review your order.',409);if(cash<total)throw offlineError('Insufficient payment.');
     const id='local:'+request.request_id,device=await this.getMeta('device_id'),created=new Date(await this.clock()).toISOString();
     const settings=Object.fromEntries((await this.db.query('SELECT * FROM settings')).map(s=>[s.key,s.value]));
-    const receipt={id,order_number:'OFF-'+device.slice(0,8)+'-'+request.request_id,user_id:user.id,cashier_name:user.fullName,created_at:created,subtotal:subtotal/100,discount_id:discountId,discount_name:discountName,discount_amount:discount/100,total:total/100,payment_method:'cash',cash_received:cash/100,change_amount:(cash-total)/100,status:'completed',source:'local',offline:true,sync_status:'pending',receipt_settings:settings,items:lines};
+    const receipt={...details,id,order_number:'OFF-'+device.slice(0,8)+'-'+request.request_id,user_id:user.id,cashier_name:user.fullName,created_at:created,subtotal:subtotal/100,discount_id:discountId,discount_name:discountName,discount_amount:discount/100,total:total/100,payment_method:'cash',cash_received:cash/100,change_amount:(cash-total)/100,status:'completed',source:'local',offline:true,sync_status:'pending',receipt_settings:settings,items:lines};
     await this.db.run('INSERT INTO local_orders(id,request_id,request_hash,user_id,device_id,receipt_number,created_at,subtotal_cents,discount_cents,total_cents,cash_cents,change_cents,receipt_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',[id,request.request_id,fingerprint,user.id,device,receipt.order_number,created,subtotal,discount,total,cash,cash-total,JSON.stringify(receipt)]);
     for(const line of lines)await this.db.run('INSERT INTO local_order_items(id,order_id,snapshot_json) VALUES (?,?,?)',[crypto.randomUUID(),id,JSON.stringify(line)]);
     for(const [pid,qty] of tracked){const result=await this.db.run('UPDATE products SET stock_quantity=stock_quantity-? WHERE id=? AND stock_quantity>=?',[qty,pid,qty]);if(result.changes!==1)throw offlineError('Insufficient Stock: '+products.get(pid).name);const stock=(await this.db.query('SELECT stock_quantity FROM products WHERE id=?',[pid]))[0].stock_quantity;await this.db.run('INSERT INTO inventory_movements(id,order_id,kind,entity_id,quantity_units,resulting_units) VALUES (?,?,?,?,?,?)',[crypto.randomUUID(),id,'product',pid,qty,stock]);}
     for(const [ingredient,qty] of required){const result=await this.db.run('UPDATE ingredients SET current_units=current_units-? WHERE id=? AND current_units>=?',[qty,ingredient,qty]);if(result.changes!==1)throw offlineError('Insufficient Stock: a recipe ingredient is unavailable.');const stock=(await this.db.query('SELECT current_units FROM ingredients WHERE id=?',[ingredient]))[0].current_units;await this.db.run('INSERT INTO inventory_movements(id,order_id,kind,entity_id,quantity_units,resulting_units) VALUES (?,?,?,?,?,?)',[crypto.randomUUID(),id,'ingredient',ingredient,qty,stock]);}
-    await this.enqueue(receipt,{request_id:request.request_id,items,discount_id:discountId,payment_method:'cash',cash_received:(cash/100).toFixed(2),expected_total:(total/100).toFixed(2)});
+    await this.enqueue(receipt,{...details,request_id:request.request_id,items,discount_id:discountId,payment_method:'cash',cash_received:(cash/100).toFixed(2),expected_total:(total/100).toFixed(2)});
     await this.db.run('DELETE FROM drafts WHERE user_id=?',[user.id]);
     return receipt;
    });

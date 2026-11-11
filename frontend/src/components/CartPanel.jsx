@@ -1,10 +1,11 @@
-import { ShoppingCart, Minus, Plus, Trash2, X, UtensilsCrossed, AlertTriangle } from 'lucide-react';
+import { ShoppingCart, Minus, Plus, Trash2, X, UtensilsCrossed, AlertTriangle, ArrowRight } from 'lucide-react';
 import { useRef } from 'react';
 import useMediaQuery, { CART_DRAWER_QUERY } from '../hooks/useMediaQuery';
 import useFocusLayer from '../hooks/useFocusLayer';
 import { useCart } from '../context/CartContext';
 import { peso } from '../utils/currency';
 import { issuesMessage } from '../utils/stock';
+import OrderDetailsFields from './OrderDetailsFields';
 
 // `open` / `onClose` only control the mobile bottom-sheet presentation; on larger screens the
 // panel is always visible as a side column.
@@ -21,14 +22,16 @@ export default function CartPanel({ discounts, onCheckout, open = false, onClose
   return (
     <div id="current-order" ref={panelRef} className={`cart-panel ${open ? 'open' : ''}`} inert={drawer && !open ? '' : undefined} role={drawer ? 'dialog' : undefined} aria-modal={drawer && open ? true : undefined} aria-labelledby="cart-heading" tabIndex={-1}>
       <div className="cart-header">
-        <h3 id="cart-heading">
-          Current Order
+        <div><h3 id="cart-heading">
+          Order details
           {itemCount > 0 && <span className="cart-count">{itemCount}</span>}
-        </h3>
+        </h3></div>
         <button className="cart-close" aria-label="Close order" onClick={onClose}><X size={20} /></button>
       </div>
 
-      <div className="cart-items">
+      <OrderDetailsFields />
+      <div className="cart-lines-heading" id="cart-lines-heading">Your order <span>{itemCount} {itemCount === 1 ? 'item' : 'items'}</span></div>
+      <div className="cart-items" role="region" aria-labelledby="cart-lines-heading" tabIndex={0}>
         {items.length === 0 ? (
           <div className="cart-empty">
             <span className="empty-icon" style={{ display: 'flex', justifyContent: 'center' }}><ShoppingCart size={34} /></span>
@@ -46,7 +49,7 @@ export default function CartPanel({ discounts, onCheckout, open = false, onClose
                 {item.product.image ? <img src={item.product.image} alt="" /> : <UtensilsCrossed size={22} />}
               </div>
               <div className="cart-item-body">
-                <div className="cart-item-name">{item.product.name}</div>
+                <div className="cart-item-heading"><div className="cart-item-name">{item.product.name}</div><div className="cart-item-price">{peso(item.subtotal)}</div></div>
                 {item.selectedOptions.length > 0 && (
                   <div className="cart-item-opts">
                     {item.selectedOptions.map((o) => o.name).join(', ')}
@@ -58,7 +61,10 @@ export default function CartPanel({ discounts, onCheckout, open = false, onClose
                     <span className="qty-value">{item.quantity}</span>
                     <button aria-label="Increase quantity" disabled={!canIncrease} onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}><Plus size={14} /></button>
                   </div>
-                  <div className="cart-item-price">{peso(item.subtotal)}</div>
+                  <div className="cart-unit-price">{peso(item.unitPrice)} each</div>
+                  <button className="cart-item-remove" aria-label={`Remove ${item.product.name}`} onClick={() => removeItem(item.cartItemId)}>
+                    <Trash2 size={13} /> Remove
+                  </button>
                 </div>
                 {issue ? (
                   <div className="cart-item-note error">
@@ -69,9 +75,6 @@ export default function CartPanel({ discounts, onCheckout, open = false, onClose
                     <AlertTriangle size={13} /> Stock limit reached ({avail.limiter.name})
                   </div>
                 ) : null}
-                <button className="cart-item-remove" onClick={() => removeItem(item.cartItemId)}>
-                  <Trash2 size={13} /> Remove
-                </button>
               </div>
             </div>
             );
@@ -81,8 +84,8 @@ export default function CartPanel({ discounts, onCheckout, open = false, onClose
 
       <div className="cart-summary">
         {discounts && discounts.length > 0 && (
-          <div className="form-group" style={{ marginBottom: 10 }}>
-            <label htmlFor="order-discount" style={{ fontSize: 12.5 }}>Discount</label>
+          <div className="form-group cart-discount-field">
+            <label htmlFor="order-discount">Discount</label>
             <select id="order-discount"
               value={discount?.id || ''}
               onChange={(e) => setDiscount(discounts.find((d) => d.id === Number(e.target.value)) || null)}
@@ -97,7 +100,7 @@ export default function CartPanel({ discounts, onCheckout, open = false, onClose
 
         <div className="summary-row"><span>Subtotal</span><span>{peso(subtotal)}</span></div>
         <div className="summary-row"><span>Discount</span><span>-{peso(discountAmount)}</span></div>
-        <div className="summary-row total"><span>Total</span><span>{peso(total)}</span></div>
+        <div className="summary-row total"><span>Total amount due</span><span>{peso(total)}</span></div>
 
         {stockIssues.length > 0 && (
           <div className="cart-stock-alert" role="alert">
@@ -107,7 +110,7 @@ export default function CartPanel({ discounts, onCheckout, open = false, onClose
 
         {persistenceError && <div className="cart-stock-alert" role="alert">Local cart could not be saved: {persistenceError}</div>}
         <button className="btn btn-primary btn-block checkout-btn" disabled={items.length === 0 || stockIssues.length > 0 || Boolean(persistenceError) || restoringDraft} onClick={onCheckout}>
-          Complete Order
+          Process Transaction <ArrowRight size={18} />
         </button>
       </div>
     </div>

@@ -34,7 +34,7 @@ async function reachable(locator,label){await locator.scrollIntoViewIfNeeded();a
   await login.goto(site+'/login',{waitUntil:'commit',timeout:120000});
   try{await login.locator('#username').waitFor();}catch{await login.screenshot({path:path.join(artifacts,'startup-failure.png')});throw Error('Responsive login did not render. '+startupErrors.join(' '));}await contained(login,'phone login');
   await login.locator('#username').fill(process.env.TEST_ADMIN_USER||'admin');await login.locator('#password').fill(process.env.TEST_ADMIN_PASSWORD);
-  await login.getByRole('button',{name:'Log in',exact:true}).click();await login.waitForURL('**/dashboard');const storageState=await loginContext.storageState();await loginContext.close();
+  await login.getByRole('button',{name:'SIGN IN',exact:true}).click();await login.waitForURL('**/dashboard');const storageState=await loginContext.storageState();await loginContext.close();
   for(const [name,width,height] of sizes.filter(entry=>!process.env.RESPONSIVE_CASES || process.env.RESPONSIVE_CASES.split(',').includes(entry[0]))){
    console.log('Checking '+name+' '+width+'x'+height);
    const c=await context({viewport:{width,height},isMobile:width<1200,hasTouch:true,storageState});const p=await c.newPage();p.setDefaultTimeout(30000);const errors=[];
@@ -65,14 +65,14 @@ async function reachable(locator,label){await locator.scrollIntoViewIfNeeded();a
      assert.equal(Math.round(insetBar.height),98);assert.ok(insetPage.y+insetPage.height<=insetBar.y+1);assert.ok(insetCart.y+insetCart.height<insetBar.y);
      await p.evaluate(()=>document.documentElement.style.removeProperty('--mobile-nav-bottom'));
     }
-   } else {assert.equal(await p.locator('.sidebar').isVisible(),true);assert.equal(await p.locator('.mobile-bottom-nav').count(),0);}
+   } else {assert.equal(await p.locator('.workspace-top-nav').isVisible(),true);assert.equal(await p.locator('.mobile-bottom-nav').count(),0);}
    if(!drawer){const bounds=await p.locator('.cart-panel').boundingBox(),menu=await p.locator('.pos-menu').boundingBox();assert.ok(bounds.x>=menu.x+menu.width-1,name+' must show products/cart side by side');}
    await p.getByPlaceholder('Search products...').fill('Milk Tea');await p.locator('.product-card').first().click();const dialog=p.locator('.customization-modal');await dialog.waitFor();await contained(p,name+' customization');
    const groups=dialog.locator('.option-group');for(let i=0;i<await groups.count();i++)await groups.nth(i).locator('.option-choice:not(.disabled)').first().click();
    await reachable(dialog.getByRole('button',{name:/Add to Order/}),name+' add action');await dialog.getByRole('button',{name:/Add to Order/}).click();
    // Route changes must preserve the in-progress cart without a document reload.
    await p.evaluate(()=>window.navigationPersistenceMarker='same-document');
-   const navigation=p.getByRole('navigation',{name:width<1200?'Mobile navigation':'POS sections'});
+   const navigation=p.getByRole('navigation',{name:width<1200?'Mobile navigation':'Administrator navigation'});
    await navigation.locator('a[href="/transactions"]').click();await p.waitForURL('**/transactions');await p.locator('.data-table tbody').waitFor();
    assert.equal(await navigation.locator('a[href="/transactions"]').getAttribute('aria-current'),'page');
    await navigation.locator('a[href="/pos"]').click();await p.waitForURL('**/pos');await p.locator('.product-card').first().waitFor();assert.equal(await p.evaluate(()=>window.navigationPersistenceMarker),'same-document');
@@ -82,14 +82,14 @@ async function reachable(locator,label){await locator.scrollIntoViewIfNeeded();a
      await p.setViewportSize({width:1024,height:768});
      await p.waitForFunction(()=>getComputedStyle(document.querySelector('.cart-fab')).display==='none');
      assert.equal(await cart.locator('.cart-item').count(),1,'Rotation must preserve the cart');
-     await reachable(cart.getByRole('button',{name:'Complete Order'}),'rotated checkout');
+     await reachable(cart.getByRole('button',{name:'Process Transaction'}),'rotated checkout');
      await p.setViewportSize({width,height});
      await p.waitForFunction(()=>getComputedStyle(document.querySelector('.cart-fab')).display!=='none');
    }
    // Transformed bottom-sheet coordinates can round 44 CSS pixels fractionally.
    for(const target of [cart.getByRole('button',{name:'Increase quantity'}),cart.getByRole('button',{name:'Remove',exact:false})]){const b=await target.boundingBox();assert.ok(b.height>=43.99&&b.width>=43.99,name+' touch target too small: '+JSON.stringify(b));}
    await reachable(cart.getByLabel('Discount'),name+' discount');await cart.getByLabel('Discount').selectOption('2');
-   await reachable(cart.getByRole('button',{name:'Complete Order'}),name+' checkout');await cart.getByRole('button',{name:'Complete Order'}).click();const payment=p.locator('.payment-modal');await payment.waitFor();
+   await reachable(cart.getByRole('button',{name:'Process Transaction'}),name+' checkout');await cart.getByRole('button',{name:'Process Transaction'}).click();const payment=p.locator('.payment-modal');await payment.waitFor();
    await payment.getByLabel('Cash Received').fill('100');await reachable(payment.getByRole('button',{name:'Confirm Payment'}),name+' payment');
    await p.screenshot({path:path.join(artifacts,name+'-payment.png')});
    // Emulate the reduced visual viewport while Android's keyboard is open.
@@ -103,7 +103,7 @@ async function reachable(locator,label){await locator.scrollIntoViewIfNeeded();a
    await p.getByPlaceholder('Search products...').fill('');await p.screenshot({path:path.join(artifacts,name+'-pos.png')});
    for(const route of routes){
     if(width<1200){const tabs=p.getByRole('navigation',{name:'Mobile navigation'});if(['inventory','reports','users','settings'].includes(route)){await tabs.getByRole('button',{name:'More',exact:true}).click();await p.locator('.mobile-more-sheet a[href="/'+route+'"]').click();await p.waitForURL('**/'+route);await p.locator('.mobile-more-sheet').waitFor({state:'hidden'});await tabs.locator('button.active').waitFor();assert.equal(await tabs.getByRole('button',{name:'More',exact:true}).evaluate(e=>e.classList.contains('active')),true,name+' More active on '+route);}else await tabs.locator('a[href="/'+route+'"]').click();}
-    else await p.locator('.sidebar a[href="/'+route+'"]').click();
+    else await p.locator('.workspace-top-nav a[href="/'+route+'"]').click();
     await p.waitForURL('**/'+route);const ready=route==='dashboard'?'.stat-card':route==='settings'?'.form-group':route==='reports'?'.stat-card':'.data-table tbody';await p.locator(ready).first().waitFor();await contained(p,name+' '+route);
     if(route==='products'||route==='users'){await p.getByRole('button',{name:'Add '+(route==='products'?'Product':'User'),exact:true}).click();const box=p.locator('.modal-box');await box.waitFor();await contained(p,name+' '+route+' form');await reachable(box.getByRole('button',{name:route==='products'?'Save Product':'Save',exact:true}),name+' '+route+' save');await box.getByRole('button',{name:'Close',exact:true}).click();}
     if(['small-phone','tablet-landscape'].includes(name) && route==='inventory') {
@@ -111,7 +111,7 @@ async function reachable(locator,label){await locator.scrollIntoViewIfNeeded();a
       await p.getByRole('button',{name:'Adjust Stock',exact:false}).first().click();box=p.locator('.modal-box');await box.waitFor();await contained(p,name+' stock form');await reachable(box.getByRole('button',{name:'Confirm',exact:true}),name+' stock confirm');await box.locator('.modal-close').click();
     }
     if(['small-phone','tablet-landscape'].includes(name) && route==='transactions') {
-      await p.locator('.filter-row select').selectOption('all');await p.getByRole('button',{name:'View',exact:true}).first().click();await p.locator('.receipt').waitFor();await contained(p,name+' receipt');await reachable(p.getByRole('button',{name:'Print Receipt',exact:false}),name+' print receipt');await p.locator('.modal-close').click();
+      await p.getByRole('combobox',{name:'Transaction period',exact:true}).selectOption('all');await p.getByRole('button',{name:'View',exact:true}).first().click();await p.locator('.receipt').waitFor();await contained(p,name+' receipt');await reachable(p.getByRole('button',{name:'Print Receipt',exact:false}),name+' print receipt');await p.locator('.modal-close').click();
     }
     if(route==='settings')await reachable(p.getByRole('button',{name:'Save Settings'}),name+' settings save');
     if(route==='dashboard'&&['small-phone','tablet-landscape'].includes(name))await p.screenshot({path:path.join(artifacts,name+'-dashboard.png')});
@@ -122,7 +122,7 @@ async function reachable(locator,label){await locator.scrollIntoViewIfNeeded();a
   const cashierContext=await context({viewport:{width:393,height:852},isMobile:true,hasTouch:true});const cashier=await cashierContext.newPage();
   await cashier.goto(site+'/login',{waitUntil:'domcontentloaded'});
   if(remote||remoteApi){const session=await require('../../backend/tests/live-readonly-session.cjs')();await cashier.evaluate(s=>{localStorage.setItem('fh_token',s.token);localStorage.setItem('fh_user',JSON.stringify(s.user));},session);await cashier.goto(site+'/pos',{waitUntil:'domcontentloaded'});}
-  else{await cashier.locator('#username').fill(process.env.TEST_CASHIER_USER||'juan');await cashier.locator('#password').fill(process.env.TEST_CASHIER_PASSWORD);await cashier.getByRole('button',{name:'Log in',exact:true}).click();await cashier.waitForURL('**/pos');}
+  else{await cashier.locator('#username').fill(process.env.TEST_CASHIER_USER||'juan');await cashier.locator('#password').fill(process.env.TEST_CASHIER_PASSWORD);await cashier.getByRole('button',{name:'SIGN IN',exact:true}).click();await cashier.waitForURL('**/pos');}
   const tabs=cashier.getByRole('navigation',{name:'Mobile navigation'});await tabs.waitFor();assert.deepEqual(await tabs.locator('a').allTextContents(),['POS','History'],'Cashier sees authorized tabs only');
   await tabs.getByRole('button',{name:'More',exact:true}).click();const nav=cashier.getByRole('dialog',{name:'More',exact:true});await nav.waitFor();assert.equal(await nav.locator('a').count(),0,'No administrator links in cashier More');await nav.getByRole('button',{name:'Close More menu'}).click();
   await tabs.getByRole('link',{name:'History',exact:true}).click();await cashier.waitForURL('**/transactions');

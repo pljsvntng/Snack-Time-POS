@@ -1,4 +1,5 @@
 const crypto=require('node:crypto'),ApiError=require('./ApiError');
+const {orderDetails,hasOrderDetails}=require('./orderDetails');
 const uuid=v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const fail=message=>{throw new ApiError(400,message);};
 function integer(v,label,min=1){if(!Number.isSafeInteger(v)||v<min||v>2147483647)fail('Invalid '+label+'.');return v;}
@@ -9,6 +10,8 @@ const fingerprint=v=>crypto.createHash('sha256').update(JSON.stringify(canonical
 function envelope(body,user,device){
  if(!body||!uuid(body.device_id)||!uuid(body.client_id)||body.device_id!==device||![0,1].includes(body.protocol_version))fail('Invalid synchronization envelope.');
  const r=body.receipt;if(!r||r.user_id!==user.id||r.id!=='local:'+body.client_id||r.order_number!=='OFF-'+body.device_id.slice(0,8)+'-'+body.client_id||r.payment_method!=='cash'||r.status!=='completed')fail('Invalid offline cash receipt.');
+ const details=orderDetails(r);
+ if(hasOrderDetails(r)&&Object.entries(details).some(([key,value])=>(r[key]??null)!==value))fail('Invalid receipt order details.');
  if(typeof r.created_at!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(r.created_at)||!Number.isFinite(Date.parse(r.created_at)))fail('Invalid sale timestamp.');
  if(!Array.isArray(r.items)||!r.items.length||r.items.length>200)fail('Invalid offline items.');
  const subtotal=cents(r.subtotal),discount=cents(r.discount_amount),total=cents(r.total),cash=cents(r.cash_received),change=cents(r.change_amount);
@@ -19,6 +22,7 @@ function envelope(body,user,device){
 }
 function resolveCatalogSale(body,snapshot){
  const r=body.receipt,q=body.request;if(!q||q.payment_method!=='cash'||!Array.isArray(q.items)||q.items.length!==r.items.length||q.items.length>200)fail('Invalid saved checkout request.');
+ if(fingerprint(orderDetails(q))!==fingerprint(orderDetails(r)))fail('Saved order details do not match the receipt.');
  const products=new Map(snapshot.products.map(p=>[p.id,p])),needs=new Map(),lines=[];
  const need=(kind,id,units,name)=>{integer(id,'stock identifier');if(units<0n)fail('Invalid recipe quantity.');const key=kind+':'+id,old=needs.get(key);needs.set(key,{kind,id,name,units:(old?.units||0n)+units});};
  let subtotal=0n;
