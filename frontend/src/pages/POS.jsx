@@ -41,7 +41,7 @@ export default function POS() {
         api.get('/discounts'),
         api.get('/settings'),
       ]);
-      setCategories(cats);
+      setCategories(cats.filter(category => Number(category.active) === 1));
       setProducts(prods.map((p) => ({ ...p, image: imageUrl(p.image) })));
       setDiscounts(disc);
       setSettings(sett);
